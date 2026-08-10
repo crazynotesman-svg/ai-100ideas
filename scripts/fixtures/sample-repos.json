@@ -1,0 +1,44 @@
+[
+  {
+    "fullName": "modelcontextprotocol/servers",
+    "name": "servers",
+    "owner": "modelcontextprotocol",
+    "description": "A collection of pre-built, open-source MCP servers maintained by the community and Anthropic.",
+    "stars": 42000,
+    "license": "MIT",
+    "topics": ["mcp", "mcp-server", "ai-agent", "llm"],
+    "language": "TypeScript",
+    "htmlUrl": "https://github.com/modelcontextprotocol/servers",
+    "homepage": "https://modelcontextprotocol.io",
+    "readme": "# MCP Servers\n\nReference implementations of Model Context Protocol servers for filesystems, databases, and more. Self-hostable and extensible.",
+    "pushedAt": "2026-08-01T00:00:00Z"
+  },
+  {
+    "fullName": "langgenius/dify",
+    "name": "dify",
+    "owner": "langgenius",
+    "description": "An open-source LLM app development platform with RAG, agent workflows, and model management.",
+    "stars": 78000,
+    "license": "MIT",
+    "topics": ["ai-agent", "rag", "llmops", "self-hosted"],
+    "language": "Python",
+    "htmlUrl": "https://github.com/langgenius/dify",
+    "homepage": "https://dify.ai",
+    "readme": "# Dify\n\nDify is a platform for building and operating generative AI applications. It supports RAG pipelines, agents, and one-click self-hosted deployment.",
+    "pushedAt": "2026-08-05T00:00:00Z"
+  },
+  {
+    "fullName": "qdrant/qdrant",
+    "name": "qdrant",
+    "owner": "qdrant",
+    "description": "Qdrant is a vector similarity search engine and vector database written in Rust.",
+    "stars": 21000,
+    "license": "Apache-2.0",
+    "topics": ["vector-db", "embeddings", "self-hosted"],
+    "language": "Rust",
+    "htmlUrl": "https://github.com/qdrant/qdrant",
+    "homepage": "https://qdrant.tech",
+    "readme": "# Qdrant\n\nQdrant is a vector database and similarity search engine. It is a self-hostable open-source alternative to managed vector services like Pinecone.",
+    "pushedAt": "2026-07-28T00:00:00Z"
+  }
+]

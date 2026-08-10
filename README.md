@@ -113,3 +113,64 @@ The bundled `workerd` binary crashes on this Windows machine
    is up to date to return to the default (production-identical) workerd prerendering.
 2. `worker-configuration.d.ts` is hand-written instead of generated. Re-run
    `npm run cf-typegen` after fixing the runtime to keep it in sync with `wrangler.toml`.
+
+## Phase 2 — ingestion & enrichment pipeline
+
+A Node/TypeScript pipeline ([`scripts/`](scripts/)) that fetches trending open-source AI
+repos + MCP servers from GitHub, enriches them with DeepSeek, and upserts them into D1.
+It runs daily via GitHub Actions (`.github/workflows/daily-sync.yml`).
+
+```
+scripts/
+  types.ts          shared types
+  util.ts           slugify, SQL escaping, concurrency pool, .env loader
+  fetcher.ts        GitHub Search API + README fetch + dedup-friendly topic annotation
+  enrich.ts         DeepSeek chat/completions call + JSON parse + deterministic fallback
+  sync.ts           builds INSERT…ON CONFLICT upserts; writes to D1 (REST or wrangler)
+  run-pipeline.ts   orchestrator (fetch → dedup → enrich → SQL → D1)
+  fixtures/         offline sample data for dry runs
+```
+
+| Command | Description |
+| --- | --- |
+| `npm run sync` | Full run: fetch, enrich, upsert into **remote** D1 |
+| `npm run sync:dry-run` | Offline-safe preview — writes `scripts/.cache/dry-run.sql`, touches nothing |
+| `npm run enrich:test` | Dry run, 3 repos, no DeepSeek (heuristic fallback only) |
+
+### Environment variables
+
+Copy `.env.example` to `.env` (never committed). See the file for the full list. The
+secrets used by CI are `DEEPSEEK_API_KEY`, `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`; `GITHUB_TOKEN` is provided by
+GitHub Actions automatically.
+
+### How it works
+
+1. **Fetch** — `fetcher.ts` queries the GitHub Search API across
+   `mcp-server, mcp, ai-agent, self-hosted-ai`, keeps repos with ≥ 10 stars, and
+   records which topic matched each repo (GitHub's search payload omits `topics`).
+2. **Dedup** — `run-pipeline.ts` keeps a `scripts/.cache/seen.json` map of
+   `slug → { stars, categorySlug }`. A repo is re-processed only when its star count
+   moves by ≥ 50 (`STAR_CHANGE_THRESHOLD`); otherwise it is skipped.
+3. **Enrich** — `enrich.ts` calls `deepseek-chat` with `response_format: json_object`
+   and validates the result. On missing key / malformed JSON / timeout it falls back to
+   a deterministic heuristic so a run never hard-fails.
+4. **Sync** — `sync.ts` builds idempotent `INSERT INTO … ON CONFLICT(slug) DO UPDATE`
+   statements (categories first, then tools) and applies them. Default transport is the
+   **D1 REST API** (`SYNC_METHOD=rest`); set `SYNC_METHOD=wrangler` to instead shell out
+   to `npx wrangler d1 execute --remote --file=…`.
+
+### Dry-run without network
+
+For a fully offline preview, point at the fixture:
+
+```bash
+GITHUB_FIXTURE=scripts/fixtures/sample-repos.json npm run sync:dry-run
+```
+
+Inspect `scripts/.cache/dry-run.sql`, then replay it manually if you like:
+
+```bash
+npx wrangler d1 execute ai-100ideas-db --local --file=scripts/.cache/dry-run.sql
+```
+

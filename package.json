@@ -17,7 +17,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ai-100ideas-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply ai-100ideas-db --remote",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "sync": "tsx scripts/run-pipeline.ts",
+    "sync:dry-run": "tsx scripts/run-pipeline.ts --dry-run",
+    "enrich:test": "tsx scripts/run-pipeline.ts --dry-run --max-repos 3 --no-enrich"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.2.0",
@@ -31,6 +34,7 @@
     "@astrojs/check": "^0.9.10",
     "@cloudflare/workers-types": "^5.20260810.1",
     "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3"
   }
 }
