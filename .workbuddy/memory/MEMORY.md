@@ -18,6 +18,15 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
 - `worker-configuration.d.ts` 为手写，不能依赖 `wrangler types`
 - 无法本地跑 `wrangler dev` / `d1 --local`，D1 相关验证需在真实环境或用 `node:sqlite` 代替
 
+## Git / 部署
+
+- GitHub 仓库：`crazynotesman-svg/ai-100ideas`（public），`main` 分支
+- 本机连的 GitHub 集成是**只读**的：不能建库、不能 push；`mcp__github__create_repository` 会 403
+- 推送必须靠用户提供的 **PAT**：`repo` 权限管代码，`workflow` 权限才能推 `.github/workflows/*`（否则 GitHub 拒绝）
+- 推送后务必把 token 从 `remote.origin.url` 和 `branch.main.remote` 抹掉（`git remote set-url` + `git config branch.main.remote origin`）
+- 本地初始分支 `master` 已改名 `main` 以对齐 GitHub 默认与用户其他仓库
+- Cloudflare Pages 部署：构建 `npm run build`，绑定 D1 `DB`（database_id 已在 `wrangler.toml`）
+
 ## 待办（后续阶段）
 
 - Phase 2：工具/MCP 列表页、分类页、"open source alternative to X" 落地页
