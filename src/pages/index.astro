@@ -1,0 +1,80 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from '../consts';
+
+// Schema.org: identifies the site itself and exposes the (future) search route
+// so Google can render a sitelinks searchbox.
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_NAME,
+    alternateName: SITE_TITLE,
+    url: SITE_URL,
+    description: SITE_DESCRIPTION,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: SITE_NAME,
+    url: SITE_URL,
+    logo: `${SITE_URL}/favicon.svg`,
+  },
+];
+
+const roadmap = [
+  { label: 'Tool & MCP server catalogue', status: 'Phase 2' },
+  { label: 'Category and "alternative to" landing pages', status: 'Phase 2' },
+  { label: 'Community submissions queue', status: 'Phase 3' },
+  { label: 'GitHub star sync worker', status: 'Phase 3' },
+];
+---
+
+<BaseLayout
+  title={`${SITE_NAME} — ${SITE_TITLE}`}
+  titleTemplate={false}
+  description={SITE_DESCRIPTION}
+  jsonLd={jsonLd}
+>
+  <main class="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-24">
+    <p class="mb-4 inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium tracking-wide text-slate-600 uppercase">
+      Phase 1 · foundation ready
+    </p>
+
+    <h1 class="text-4xl font-semibold tracking-tight text-balance text-slate-900 sm:text-5xl">
+      Open source AI tools &amp; MCP servers
+    </h1>
+
+    <p class="mt-5 text-lg leading-relaxed text-slate-600">
+      {SITE_DESCRIPTION}
+    </p>
+
+    <div class="mt-10 rounded-xl border border-slate-200 bg-slate-50/70 p-6">
+      <h2 class="text-sm font-semibold tracking-wide text-slate-500 uppercase">What's next</h2>
+      <ul class="mt-4 space-y-3">
+        {
+          roadmap.map((item) => (
+            <li class="flex items-center justify-between gap-4 text-sm">
+              <span class="text-slate-700">{item.label}</span>
+              <span class="shrink-0 rounded-md bg-white px-2 py-1 font-mono text-xs text-slate-500 ring-1 ring-slate-200">
+                {item.status}
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <footer class="mt-12 text-sm text-slate-400">
+      Astro · Tailwind CSS · Cloudflare D1 · Drizzle ORM
+    </footer>
+  </main>
+</BaseLayout>

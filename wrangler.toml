@@ -1,0 +1,42 @@
+#:schema node_modules/wrangler/config-schema.json
+# Cloudflare configuration for ai.100ideas.net
+# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "ai-100ideas"
+main = "@astrojs/cloudflare/entrypoints/server"
+compatibility_date = "2026-08-10"
+
+# nodejs_compat  -> allows node: built-ins (needed by drizzle-orm / astro internals)
+# global_fetch_strictly_public -> added by @astrojs/cloudflare, keeps fetch() semantics
+#   identical between `astro dev` and production.
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+# Static assets produced by `astro build`
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# Cloudflare D1 (serverless SQLite)
+# ---------------------------------------------------------------------------
+# Create the real database with:
+#   npx wrangler d1 create ai-100ideas-db
+# then paste the returned uuid into `database_id` below.
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-100ideas-db"
+database_id = "00000000-0000-0000-0000-000000000000" # placeholder — replace after `wrangler d1 create`
+migrations_dir = "drizzle/migrations"
+
+# ---------------------------------------------------------------------------
+# Sessions (optional)
+# ---------------------------------------------------------------------------
+# @astrojs/cloudflare wires Astro sessions to a KV namespace named SESSION and
+# auto-provisions it on deploy. Uncomment to manage it yourself:
+#
+# [[kv_namespaces]]
+# binding = "SESSION"
+# id = "<kv-namespace-id>"

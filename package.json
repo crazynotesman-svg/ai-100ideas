@@ -1,0 +1,36 @@
+{
+  "name": "ai-100ideas",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source AI tools & MCP server directory — ai.100ideas.net",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "wrangler dev",
+    "astro": "astro",
+    "check": "astro check",
+    "cf-typegen": "wrangler types",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply ai-100ideas-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply ai-100ideas-db --remote",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.2.0",
+    "@astrojs/sitemap": "^3.7.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.2.0",
+    "drizzle-orm": "^0.45.2",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@cloudflare/workers-types": "^5.20260810.1",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^6.0.3"
+  }
+}
