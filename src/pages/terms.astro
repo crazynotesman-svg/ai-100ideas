@@ -1,0 +1,45 @@
+---
+/**
+ * /terms — static legal page.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+const updated = new Date().getFullYear();
+---
+
+<BaseLayout title="Terms of Service" description="Terms of Service for 100 Ideas AI.">
+  <Header />
+  <main class="mx-auto max-w-3xl px-4 py-12">
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Terms of Service</h1>
+    <p class="mt-2 text-sm text-slate-500">Last updated: {updated}</p>
+
+    <div class="mt-8 space-y-6 text-sm leading-relaxed text-slate-700">
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">Use of the directory</h2>
+        <p class="mt-2">
+          100 Ideas AI is provided "as is" for informational purposes. Listings describe third-party
+          open-source projects; we are not responsible for their content, availability or licensing.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">Accuracy</h2>
+        <p class="mt-2">
+          Metadata is generated automatically and may contain errors. Always verify license and
+          usage terms on the upstream repository before relying on a tool.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">Submissions</h2>
+        <p class="mt-2">
+          By submitting a tool you confirm you have the right to share it and that the information
+          provided is accurate to the best of your knowledge.
+        </p>
+      </section>
+    </div>
+  </main>
+  <Footer />
+</BaseLayout>

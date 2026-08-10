@@ -1,0 +1,51 @@
+---
+/**
+ * /privacy — static legal page.
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+const updated = new Date().getFullYear();
+---
+
+<BaseLayout title="Privacy Policy" description="How 100 Ideas AI handles data on this directory.">
+  <Header />
+  <main class="mx-auto max-w-3xl px-4 py-12">
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Privacy Policy</h1>
+    <p class="mt-2 text-sm text-slate-500">Last updated: {updated}</p>
+
+    <div class="mt-8 space-y-6 text-sm leading-relaxed text-slate-700">
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">What we collect</h2>
+        <p class="mt-2">
+          This directory is a static, read-only catalogue of publicly available open-source projects.
+          We do not require accounts to browse it. Tool metadata (name, description, stars, license,
+          repository links) is sourced from public GitHub data and enrichment providers.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">Submissions</h2>
+        <p class="mt-2">
+          If you submit a tool, the URL and optional email you provide are stored so we can review and
+          publish it. We use submitted emails solely for the submission workflow and never sell them.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">Analytics &amp; cookies</h2>
+        <p class="mt-2">
+          We may use privacy-respecting, aggregated analytics to understand traffic. We do not use
+          third-party advertising cookies.
+        </p>
+      </section>
+
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">Contact</h2>
+        <p class="mt-2">Questions about this policy? Open an issue on our GitHub repository.</p>
+      </section>
+    </div>
+  </main>
+  <Footer />
+</BaseLayout>

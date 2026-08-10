@@ -1,9 +1,22 @@
 ---
+/**
+ * Home page — hero, client-side search + category pills, and the full tool grid.
+ * SSR (prerender=false) so the grid reflects live D1 data.
+ */
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import ToolCard from '../components/ToolCard.astro';
+import { categoryLabel } from '../lib/format';
+import { getAllCategories, getAllTools } from '../db/queries';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from '../consts';
 
-// Schema.org: identifies the site itself and exposes the (future) search route
-// so Google can render a sitelinks searchbox.
+export const prerender = false;
+
+const tools = await getAllTools();
+const categories = await getAllCategories();
+const mcpCount = tools.filter((t) => t.isMcp).length;
+
 const jsonLd = [
   {
     '@context': 'https://schema.org',
@@ -12,14 +25,6 @@ const jsonLd = [
     alternateName: SITE_TITLE,
     url: SITE_URL,
     description: SITE_DESCRIPTION,
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: {
-        '@type': 'EntryPoint',
-        urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
-      },
-      'query-input': 'required name=search_term_string',
-    },
   },
   {
     '@context': 'https://schema.org',
@@ -28,13 +33,17 @@ const jsonLd = [
     url: SITE_URL,
     logo: `${SITE_URL}/favicon.svg`,
   },
-];
-
-const roadmap = [
-  { label: 'Tool & MCP server catalogue', status: 'Phase 2' },
-  { label: 'Category and "alternative to" landing pages', status: 'Phase 2' },
-  { label: 'Community submissions queue', status: 'Phase 3' },
-  { label: 'GitHub star sync worker', status: 'Phase 3' },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Featured open-source AI tools & MCP servers',
+    itemListElement: tools.slice(0, 12).map((t, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${SITE_URL}/tool/${t.slug}`,
+      name: t.name,
+    })),
+  },
 ];
 ---
 
@@ -44,37 +53,128 @@ const roadmap = [
   description={SITE_DESCRIPTION}
   jsonLd={jsonLd}
 >
-  <main class="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-24">
-    <p class="mb-4 inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium tracking-wide text-slate-600 uppercase">
-      Phase 1 · foundation ready
-    </p>
+  <Header active="home" />
 
-    <h1 class="text-4xl font-semibold tracking-tight text-balance text-slate-900 sm:text-5xl">
-      Open source AI tools &amp; MCP servers
-    </h1>
+  <main class="mx-auto max-w-6xl px-4 py-12">
+    <!-- Hero -->
+    <section class="text-center">
+      <h1 class="text-balance text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+        Open source AI tools &amp; MCP servers
+      </h1>
+      <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
+        {SITE_DESCRIPTION}
+      </p>
+      <dl class="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm">
+        <div class="flex items-baseline gap-2">
+          <dt class="text-2xl font-semibold text-slate-900">{tools.length}</dt>
+          <dd class="text-slate-500">tools indexed</dd>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <dt class="text-2xl font-semibold text-slate-900">{mcpCount}</dt>
+          <dd class="text-slate-500">MCP servers</dd>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <dt class="text-2xl font-semibold text-slate-900">{categories.length}</dt>
+          <dd class="text-slate-500">categories</dd>
+        </div>
+      </dl>
+    </section>
 
-    <p class="mt-5 text-lg leading-relaxed text-slate-600">
-      {SITE_DESCRIPTION}
-    </p>
+    <!-- Search + category pills -->
+    <section class="mt-10">
+      <div class="relative max-w-xl">
+        <svg viewBox="0 0 24 24" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input
+          id="tool-search"
+          type="search"
+          placeholder="Search tools, stacks, alternatives…"
+          class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          autocomplete="off"
+        />
+      </div>
 
-    <div class="mt-10 rounded-xl border border-slate-200 bg-slate-50/70 p-6">
-      <h2 class="text-sm font-semibold tracking-wide text-slate-500 uppercase">What's next</h2>
-      <ul class="mt-4 space-y-3">
+      <div id="cat-pills" class="mt-4 flex flex-wrap gap-2">
+        <button type="button" data-cat="all" aria-pressed="true" class="rounded-full border border-indigo-600 bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition">All</button>
         {
-          roadmap.map((item) => (
-            <li class="flex items-center justify-between gap-4 text-sm">
-              <span class="text-slate-700">{item.label}</span>
-              <span class="shrink-0 rounded-md bg-white px-2 py-1 font-mono text-xs text-slate-500 ring-1 ring-slate-200">
-                {item.status}
-              </span>
-            </li>
+          categories.map((c) => (
+            <button
+              type="button"
+              data-cat={c.slug}
+              aria-pressed="false"
+              class="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-600 transition hover:border-slate-300"
+            >
+              {categoryLabel(c.slug)}
+            </button>
           ))
         }
-      </ul>
-    </div>
+      </div>
+    </section>
 
-    <footer class="mt-12 text-sm text-slate-400">
-      Astro · Tailwind CSS · Cloudflare D1 · Drizzle ORM
-    </footer>
+    <!-- Grid -->
+    <section class="mt-8">
+      {
+        tools.length === 0 ? (
+          <p class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm text-slate-500">
+            No tools indexed yet. Run the ingestion pipeline to populate the directory.
+          </p>
+        ) : (
+          <div id="tool-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {tools.map((t) => (
+              <ToolCard tool={t} />
+            ))}
+          </div>
+        )
+      }
+      <p id="no-results" hidden class="mt-6 text-center text-sm text-slate-500">
+        No tools match your search.
+      </p>
+    </section>
   </main>
+
+  <Footer />
+
+  <script>
+    const input = document.getElementById('tool-search') as HTMLInputElement | null;
+    const grid = document.getElementById('tool-grid');
+    const pills = Array.from(document.querySelectorAll<HTMLButtonElement>('#cat-pills button'));
+    const noResults = document.getElementById('no-results');
+    const cards = grid ? Array.from(grid.querySelectorAll<HTMLElement>('.tool-card')) : [];
+
+    const ACTIVE = 'rounded-full border border-indigo-600 bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition';
+    const IDLE = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-600 transition hover:border-slate-300';
+
+    let activeCat = 'all';
+
+    function apply() {
+      const q = (input?.value ?? '').trim().toLowerCase();
+      let visible = 0;
+      for (const card of cards) {
+        const cat = card.getAttribute('data-category') || '';
+        const tags = card.getAttribute('data-tags') || '';
+        const okCat = activeCat === 'all' || cat === activeCat;
+        const okQ = q === '' || tags.includes(q);
+        const show = okCat && okQ;
+        card.classList.toggle('hidden', !show);
+        if (show) visible++;
+      }
+      if (noResults) noResults.hidden = visible !== 0;
+    }
+
+    input?.addEventListener('input', apply);
+
+    pills.forEach((pill) => {
+      pill.addEventListener('click', () => {
+        activeCat = pill.getAttribute('data-cat') || 'all';
+        pills.forEach((p) => {
+          const on = p === pill;
+          p.setAttribute('aria-pressed', String(on));
+          p.className = on ? ACTIVE : IDLE;
+        });
+        apply();
+      });
+    });
+  </script>
 </BaseLayout>

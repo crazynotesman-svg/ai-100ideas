@@ -28,7 +28,7 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "ai-100ideas-db"
-database_id = "00000000-0000-0000-0000-000000000000" # placeholder — replace after `wrangler d1 create`
+database_id = "05d5d4dd-4971-4cd1-97cf-693ad64d1014" # D1 database id (created via `wrangler d1 create`)
 migrations_dir = "drizzle/migrations"
 
 # ---------------------------------------------------------------------------

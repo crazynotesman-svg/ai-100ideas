@@ -28,3 +28,9 @@ export const TWITTER_HANDLE = '@100ideas';
 
 export const SITE_LOCALE = 'en_US';
 export const SITE_LANG = 'en';
+
+/** Public GitHub org/repo for the project (footer + Submit Tool CTA). */
+export const GITHUB_URL = 'https://github.com/100ideas/ai';
+
+/** Where visitors propose a new tool (opens a GitHub issue). */
+export const SUBMIT_TOOL_URL = 'https://github.com/100ideas/ai/issues/new?title=Tool%20submission';

@@ -2,7 +2,6 @@
 import { defineConfig } from 'astro/config';
 
 import cloudflare from '@astrojs/cloudflare';
-import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
@@ -31,12 +30,8 @@ export default defineConfig({
   },
 
   integrations: [
-    sitemap({
-      filter: (page) => !page.includes('/admin'),
-      changefreq: 'weekly',
-      priority: 0.7,
-      lastmod: new Date(),
-    }),
+    // Sitemap is served dynamically from src/pages/sitemap.xml.ts (SSR) so that
+    // on-demand/SSR routes (tools, categories, alternatives) are all included.
   ],
 
   vite: {
