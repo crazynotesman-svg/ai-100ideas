@@ -1,9 +1,14 @@
 # Deployment Guide — ai.100ideas.net
 
 Open-source AI tools & MCP server directory. Astro 7 (static + selective SSR)
-deployed to **Cloudflare Pages**, with data in **Cloudflare D1** (SQLite), kept
-fresh by a daily GitHub Actions pipeline (GitHub search → DeepSeek enrichment →
-D1 upsert).
+deployed to **Cloudflare Workers (with Assets)**, with data in **Cloudflare D1**
+(SQLite), kept fresh by a daily GitHub Actions pipeline (GitHub search →
+DeepSeek enrichment → D1 upsert).
+
+> ⚠️ **This is a Cloudflare Worker, NOT Cloudflare Pages.** The build output is
+> `dist/server/entry.mjs` (the Worker) + `dist/client/` (static assets), driven
+> by `dist/server/wrangler.json`. You deploy with `wrangler deploy`, not the
+> Pages "Connect to Git" wizard.
 
 - Production URL: https://ai.100ideas.net
 - Repo: https://github.com/crazynotesman-svg/ai-100ideas
@@ -16,34 +21,31 @@ D1 upsert).
 |---|---|---|
 | Node.js | ≥ 22.12.0 | `node -v` |
 | Wrangler (CLI) | v4.x | `npx wrangler --version` |
-| Cloudflare account | — | D1 + Pages enabled (both are free-tier) |
+| Cloudflare account | — | Workers + D1 + Assets enabled (all free-tier) |
 | A DeepSeek API key | — | https://platform.deepseek.com |
 
-You will also need a **Cloudflare API Token** with `Account > D1 > Edit`
-permission, plus your **Account ID** (Dashboard → right sidebar, or
-`npx wrangler whoami`).
+You need a **Cloudflare API Token** with:
+
+- `Account > Workers Scripts > Edit` (to deploy the Worker)
+- `Account > D1 > Edit` (to apply migrations + let the pipeline upsert)
+- your **Account ID** (Dashboard → right sidebar, or `npx wrangler whoami`)
+
+Locally you can skip the token and just run `wrangler login` (opens a browser
+to authorize the CLI against your account).
 
 ---
 
 ## 2. One-time setup
 
-### 2.1 Create the D1 database
+### 2.1 Create the D1 database (if not already created)
 
 ```bash
 npx wrangler d1 create ai-100ideas-db
 ```
 
-Copy the returned `database_id` UUID into `wrangler.toml`:
-
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "ai-100ideas-db"
-database_id = "05d5d4dd-4971-4cd1-97cf-693ad64d1014"
-```
-
-> The database_id is **already filled in** for this repo. Only redo this step
-> if you created a brand-new database.
+The `database_id` is **already filled in** `wrangler.toml`
+(`05d5d4dd-4971-4cd1-97cf-693ad64d1014`). Only redo this if you created a
+brand-new database.
 
 ### 2.2 Apply the schema (creates the tables)
 
@@ -54,66 +56,73 @@ npm run db:migrate:remote
 # equivalent to: npx wrangler d1 migrations apply ai-100ideas-db --remote
 ```
 
-This runs `0000_init.sql`, which creates the `categories` and `tools` tables
-that the daily pipeline upserts into. **Do not skip this** — the pipeline only
-does `INSERT ... ON CONFLICT`, so the tables must already exist.
+This runs `0000_init.sql`, creating the `categories` and `tools` tables that
+the daily pipeline upserts into. **Do not skip this** — the pipeline only does
+`INSERT ... ON CONFLICT`, so the tables must already exist.
 
-> If you ever change `src/db/schema.ts`, regenerate the migration with
-> `npm run db:generate` and re-run `db:migrate:remote`.
+### 2.3 Connect the custom domain `ai.100ideas.net`
+
+This is the step that makes the URL actually respond. Without it the Worker
+exists but `ai.100ideas.net` still 404s.
+
+- The domain must be **managed by Cloudflare** (its nameservers point to
+  Cloudflare). If it is, go to **Workers & Pages → ai-100ideas → Settings →
+  Domains & Routes → Add** and enter `ai.100ideas.net`.
+- Cloudflare provisions a cert automatically; wait for it to go "Active".
+- If the domain is NOT on Cloudflare, move it to Cloudflare first (or use a
+  `routes` entry pointing at a Cloudflare-managed zone).
 
 ---
 
-## 3. Deploy to Cloudflare Pages
+## 3. Deploy to Cloudflare Workers
 
-### Option A — Dashboard (recommended)
+### Option A — Local / one-shot (recommended for the first deploy)
 
-1. **Workers & Pages → Create → Pages → Connect to Git** → pick the repo.
-2. Build settings:
-   - **Framework preset:** `Astro`
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-3. **Environment variables / bindings** → add a **D1 database binding**:
-   - Variable name: **`DB`**  ← must match `binding = "DB"` in `wrangler.toml`
-   - Database: `ai-100ideas-db`
-4. Save & **Deploy**. Cloudflare runs the build and serves the site.
+```bash
+npm install
+npm run build
+cd dist/server
+npx wrangler deploy          # uses the generated ./wrangler.json
+```
 
-### Option B — Wrangler (CI / advanced)
+`dist/server/wrangler.json` (produced by `astro build`) already declares:
 
-Pages projects built from a repo are normally managed through the dashboard or
-Git integration; `wrangler pages deploy dist` is an alternative for
-non-Git builds. The D1 binding (`DB`) still has to be wired in the Pages
-project settings (Option A step 3).
+- `name: ai-100ideas`, `main: entry.mjs`
+- `assets: { directory: "../client", binding: "ASSETS" }` — serves static files
+- `d1_databases: [{ binding: "DB", database_name: "ai-100ideas-db", ... }]`
+- `kv_namespaces: [{ binding: "SESSION" }]` — auto-provisioned by Cloudflare
 
-### Verify
+After it finishes, the Worker is live at
+`https://ai-100ideas.<your-subdomain>.workers.dev` and (once §2.3 is done) at
+`https://ai.100ideas.net`.
 
-- Visit https://ai.100ideas.net — the homepage, `/mcp`, and a tool detail page
-  should render.
-- `/sitemap.xml` should return XML including the SSR routes.
+### Option B — GitHub Actions auto-deploy (recommended for ongoing)
+
+`.github/workflows/deploy.yml` builds and deploys on every push to `main`
+(and manual `workflow_dispatch`). It reuses the repo's `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID` secrets, and also applies D1 migrations (idempotent)
+so the tables always exist. Pushing this file requires a PAT with the
+**`workflow`** scope (it adds a workflow).
+
+> Note: the `CLOUDFLARE_API_TOKEN` must include `Workers:Edit` (not just
+> `D1:Edit`) for `wrangler deploy` to succeed.
 
 ---
 
 ## 4. Repository Secrets (GitHub Actions)
 
-The daily pipeline runs in GitHub Actions, **not** in the Pages build. It needs
-these **repository secrets** (Settings → Secrets and variables → Actions):
+Two workflows use secrets — `deploy.yml` (build + deploy) and `daily-sync.yml`
+(data sync).
 
-| Secret | Value | Notes |
+| Secret | Value | Needed by |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | DeepSeek API key | Required for enrichment. Without it the pipeline still runs but every tool gets a deterministic fallback description. |
-| `CLOUDFLARE_API_TOKEN` | CF API token (`D1:Edit`) | Used by `wrangler d1 execute` to upsert rows. |
-| `CLOUDFLARE_ACCOUNT_ID` | CF account id | From `npx wrangler whoami`. |
-| `CLOUDFLARE_D1_DATABASE_ID` | `05d5d4dd-...` | Same id as `wrangler.toml`. |
-
-Optional:
-
-| Secret | Value | Notes |
-|---|---|---|
-| `SYNC_METHOD` | `wrangler` (default) or `rest` | `wrangler` shells out to `npx wrangler d1 execute`; `rest` calls the D1 REST API directly. Leave unset to use the default. |
+| `CLOUDFLARE_API_TOKEN` | CF API token with **`Workers:Edit` + `D1:Edit`** | deploy + daily-sync |
+| `CLOUDFLARE_ACCOUNT_ID` | CF account id (`npx wrangler whoami`) | deploy + daily-sync |
+| `DEEPSEEK_API_KEY` | DeepSeek API key | daily-sync (optional — without it, tools get a deterministic fallback) |
+| `CLOUDFLARE_D1_DATABASE_ID` | `05d5d4dd-...` | daily-sync |
 
 `GITHUB_TOKEN` is **automatically injected** by Actions as `${{ github.token }}`
-— you do **not** create it as a secret. (The workflow previously referenced
-`secrets.GITHUB_TOKEN`, which resolves to empty; it now correctly uses
-`github.token`.)
+— you do **not** create it as a secret.
 
 ---
 
@@ -123,11 +132,9 @@ Optional:
 
 - **Trigger:** `0 2 * * *` UTC daily (10:00 Beijing), plus manual
   `workflow_dispatch`.
-- **What it does:** checks out the repo, `npm ci`, then
-  `npx tsx scripts/run-pipeline.ts` — searches GitHub for AI/MCP repos, enriches
-  each with DeepSeek (or a fallback), and upserts rows into D1.
-- **Concurrency:** a `daily-sync` group with `cancel-in-progress: false` so
-  overlapping runs queue instead of clobbering each other.
+- **What it does:** `npm ci`, then `npx tsx scripts/run-pipeline.ts` — searches
+  GitHub for AI/MCP repos, enriches each with DeepSeek (or a fallback), and
+  upserts rows into D1.
 
 ### Resilience (added after the empty-SQL incident)
 
@@ -138,27 +145,9 @@ The pipeline can no longer crash the deploy with an empty SQL file:
    pipeline never emits empty data.
 2. `scripts/run-pipeline.ts` skips D1 entirely when `enriched.length === 0`
    (`nothing to sync`), so an empty batch can never reach Wrangler.
-3. `scripts/sync.ts` hardens the write path in three layers:
-   - `hasStatements()` skips execution if the in-memory statement array is blank.
-   - `fileHasStatements()` re-reads the **written file** and skips if it contains
-     only whitespace/comments (catches any future path that emits a blank file).
-   - the Wrangler spawn **captures stderr** and treats a
-     `did not contain a statement` response as a no-op warning (D1 unchanged)
-     instead of aborting the whole pipeline with a non-zero exit code.
-   - `writeSqlFile()` no longer injects a stray `;` between statements (each
-     statement already ends with one).
-
-### Run it manually
-
-```bash
-# dry run (no network writes, prints generated SQL):
-npm run sync:dry-run
-
-# small smoke test (3 repos, no DeepSeek calls):
-npm run enrich:test
-```
-
-Or trigger the workflow from the Actions tab → **Run workflow**.
+3. `scripts/sync.ts` hardens the write path: `hasStatements()` / the Wrangler
+   spawn captures stderr and treats `did not contain a statement` as a no-op
+   warning (D1 unchanged); `writeSqlFile()` no longer injects a stray `;`.
 
 ---
 
@@ -166,19 +155,14 @@ Or trigger the workflow from the Actions tab → **Run workflow**.
 
 ```bash
 npm install
-npm run dev            # astro dev (http://localhost:4321)
-
-# Preview the production build locally via the Workers runtime:
-npm run preview       # wrangler dev
-
-# Type-check before pushing:
-npm run check         # astro check (must report 0 errors)
+npm run dev       # astro dev (http://localhost:4321)
+npm run preview  # wrangler dev (serves the built Worker locally)
+npm run check    # astro check (must report 0 errors before pushing)
 ```
 
 > `astro.config.mjs` sets `prerenderEnvironment: 'node'` because the bundled
 > `workerd` binary crashes on the maintainer's Windows machine. On a normal CI
-> runner this is harmless; drop the line if you want the default workerd
-> prerender.
+> runner this is harmless.
 
 ---
 
@@ -186,12 +170,14 @@ npm run check         # astro check (must report 0 errors)
 
 | Symptom | Cause / Fix |
 |---|---|
-| `SQL code did not contain a statement` | Old bug, fixed. If seen again, check `hasStatements()` in `sync.ts` and the enrich fallback in `enrich.ts`. |
-| Daily run produces no new rows | `DEEPSEEK_API_KEY` empty → fallback rows only (still valid). Or tables missing → run `npm run db:migrate:remote`. |
-| `refusing to allow a Personal Access Token ... without 'workflow' scope` | Pushing a workflow file (`.github/workflows/*`) requires a PAT with the `workflow` scope. A `repo`-only token can't. |
-| `database_id` mismatch | `wrangler.toml` and the `CLOUDFLARE_D1_DATABASE_ID` secret must be the same UUID. |
-| Pages 404 on tool detail pages | Those routes are SSR (`prerender = false`) and need the `DB` D1 binding present in the Pages project. Re-check step 3.3. |
-| `astro check` errors after schema change | Regenerate types: `npm run cf-typegen`, then re-run `npm run check`. |
+| `ai.100ideas.net` returns a **bare 404 / empty body** | Site was never deployed, OR the custom domain was never connected to the Worker (§2.3). `wrangler deploy` + add the domain. |
+| Worker live at `*.workers.dev` but **custom domain 404s** | Custom domain not added in Workers → Settings → Domains & Routes. |
+| Homepage shows "No tools indexed yet" | D1 is empty — run the daily-sync workflow once (it's been hardened; DeepSeek timeouts no longer produce an empty SQL crash). |
+| `SQL code did not contain a statement` | Old bug, fixed. Re-run the hardened pipeline. |
+| `daily-sync` produces no new rows | `DEEPSEEK_API_KEY` empty → fallback rows only (still valid). Or tables missing → `npm run db:migrate:remote`. |
+| `wrangler deploy` → `workers.api.account... 403` | `CLOUDFLARE_API_TOKEN` lacks `Workers:Edit`. Regenerate the token with that permission. |
+| `refusing to allow a PAT ... without 'workflow' scope` | Pushing a workflow file needs a PAT with the `workflow` scope. |
+| `database_id` mismatch | `wrangler.toml` and `CLOUDFLARE_D1_DATABASE_ID` secret must match. |
 
 ---
 
@@ -199,8 +185,9 @@ npm run check         # astro check (must report 0 errors)
 
 - [ ] `wrangler.toml` has the correct `database_id`
 - [ ] `npm run db:migrate:remote` applied (tables exist)
-- [ ] Cloudflare Pages project created, build `npm run build`, output `dist`
-- [ ] Pages D1 binding named **`DB`** → `ai-100ideas-db`
-- [ ] 4 repo secrets set (DeepSeek + 3 Cloudflare)
-- [ ] `npm run check` = 0 errors before each push
-- [ ] First manual `workflow_dispatch` run succeeds
+- [ ] `npm run build` succeeds locally
+- [ ] `cd dist/server && npx wrangler deploy` done (Worker is live)
+- [ ] Custom domain `ai.100ideas.net` added to the Worker (§2.3) → no more 404
+- [ ] `CLOUDFLARE_API_TOKEN` has **Workers:Edit + D1:Edit**; `CLOUDFLARE_ACCOUNT_ID` set
+- [ ] (optional) `.github/workflows/deploy.yml` pushed for auto-deploy
+- [ ] First `daily-sync` `workflow_dispatch` run populates D1
