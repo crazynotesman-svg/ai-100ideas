@@ -8,9 +8,10 @@
 #   CLOUDFLARE_ACCOUNT_ID   Cloudflare account id
 #   CLOUDFLARE_D1_DATABASE_ID  The D1 database id (from `wrangler d1 create`)
 #
-# GITHUB_TOKEN is provided automatically by GitHub Actions (no secret needed);
-# it only raises the Search API rate limit. Increase it via a PAT if you hit
-# secondary-rate-limit errors.
+# The Actions token is injected automatically as `github.token` (NOT a repo
+# secret, so `secrets.GITHUB_TOKEN` would resolve to empty). It only raises the
+# GitHub Search API rate limit. Swap in a PAT via `${{ secrets.GH_PAT }}` if you
+# hit secondary-rate-limit errors during large crawls.
 name: Daily Sync (GitHub → DeepSeek → D1)
 
 on:
@@ -46,7 +47,7 @@ jobs:
       - name: Run enrichment + D1 sync pipeline
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
