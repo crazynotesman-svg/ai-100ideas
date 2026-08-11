@@ -193,6 +193,7 @@ async function main(): Promise<void> {
   if (enriched.length === 0) {
     log.info('nothing to sync.');
   } else {
+    log.info(`built ${sql.length} upsert statements; applying to D1...`);
     await applyToD1(sql);
     const newCache = loadCache();
     for (const e of enriched) {

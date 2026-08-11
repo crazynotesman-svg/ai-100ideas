@@ -11,7 +11,7 @@
  * In dry-run mode nothing is written to D1; the SQL is emitted to a file so it
  * can be inspected / replayed locally.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import type { EnrichedTool } from './types';
 import { jsonSql, sqlInt, sqlStr } from './util';
@@ -91,8 +91,30 @@ export function buildUpsertStatements(items: EnrichedTool[]): string[] {
 export function writeSqlFile(sql: string[], cacheDir = 'scripts/.cache', name = 'dry-run.sql'): string {
   mkdirSync(cacheDir, { recursive: true });
   const file = `${cacheDir}/${name}`;
-  writeFileSync(file, sql.join('\n;\n') + '\n', 'utf8');
+  // Each statement already ends with ';', so join with a plain newline.
+  // (Joining with '\n;\n' would inject a stray ';' between statements.)
+  writeFileSync(file, sql.join('\n') + '\n', 'utf8');
   return file;
+}
+
+/**
+ * Returns true if the on-disk SQL file actually contains a real statement —
+ * i.e. something other than whitespace, semicolons, or SQL comments. This is a
+ * second line of defense behind `hasStatements()`: Wrangler rejects files that
+ * parse to zero statements, and we must never hand it such a file.
+ */
+function fileHasStatements(file: string): boolean {
+  try {
+    const content = readFileSync(file, 'utf8');
+    const stripped = content
+      .replace(/--[^\n]*/g, '') // line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '') // block comments
+      .replace(/;/g, '') // statement terminators
+      .trim();
+    return stripped.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Apply statements to D1. No-op when `dryRun` is true. */
@@ -151,18 +173,37 @@ async function applyViaWrangler(sql: string[], cacheDir?: string): Promise<void>
   }
   const dir = cacheDir ?? 'scripts/.cache';
   const file = writeSqlFile(sql, dir, `sync-${Date.now()}.sql`);
+  // Defense in depth: verify the written file actually contains a statement.
+  // (Catches any future path that yields a blank/comment-only file.)
+  if (!fileHasStatements(file)) {
+    console.log(`[sync] Written file ${file} contains no SQL statements. Skipping wrangler execution.`);
+    return;
+  }
   await new Promise<void>((resolve, reject) => {
+    let stderr = '';
+    let stdout = '';
     const child = spawn(
       'npx',
       ['wrangler', 'd1', 'execute', DB_NAME, '--remote', '--file', file],
-      { stdio: 'inherit', shell: true },
+      { stdio: ['ignore', 'pipe', 'pipe'], shell: true },
     );
+    child.stdout?.on('data', (d) => (stdout += d.toString()));
+    child.stderr?.on('data', (d) => (stderr += d.toString()));
     child.on('error', reject);
-    child.on('close', (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`wrangler d1 execute exited with code ${code}`)),
-    );
+    child.on('close', (code) => {
+      if (code === 0) return resolve();
+      const combined = `${stdout}\n${stderr}`;
+      // Wrangler rejects an empty/whitespace-only file with this message.
+      // That is a no-op, not a failure — the DB is simply unchanged. Never
+      // let it abort the whole pipeline.
+      if (/did not contain a statement/i.test(combined)) {
+        console.warn(
+          `[sync] wrangler reported no statements in ${file} — skipping (D1 unchanged).`,
+        );
+        return resolve();
+      }
+      reject(new Error(`wrangler d1 execute exited with code ${code}: ${stderr || stdout}`));
+    });
   });
   console.log(`[sync] applied ${sql.length} statements via wrangler (file: ${file}).`);
 }

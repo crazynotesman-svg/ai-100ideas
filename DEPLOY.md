@@ -136,9 +136,17 @@ The pipeline can no longer crash the deploy with an empty SQL file:
 1. `scripts/enrich.ts` wraps every DeepSeek call in a 30s timeout + retry, and a
    top-level `try/catch` guarantees a valid **fallback** record per repo — the
    pipeline never emits empty data.
-2. `scripts/sync.ts` guards with `hasStatements()` — if (somehow) zero SQL
-   statements are produced, it **skips** the D1/Wrangler execution instead of
-   failing with `SQL code did not contain a statement`.
+2. `scripts/run-pipeline.ts` skips D1 entirely when `enriched.length === 0`
+   (`nothing to sync`), so an empty batch can never reach Wrangler.
+3. `scripts/sync.ts` hardens the write path in three layers:
+   - `hasStatements()` skips execution if the in-memory statement array is blank.
+   - `fileHasStatements()` re-reads the **written file** and skips if it contains
+     only whitespace/comments (catches any future path that emits a blank file).
+   - the Wrangler spawn **captures stderr** and treats a
+     `did not contain a statement` response as a no-op warning (D1 unchanged)
+     instead of aborting the whole pipeline with a non-zero exit code.
+   - `writeSqlFile()` no longer injects a stray `;` between statements (each
+     statement already ends with one).
 
 ### Run it manually
 
