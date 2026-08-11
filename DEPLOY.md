@@ -9,6 +9,14 @@ DeepSeek enrichment → D1 upsert).
 > `dist/server/entry.mjs` (the Worker) + `dist/client/` (static assets), driven
 > by `dist/server/wrangler.json`. You deploy with `wrangler deploy`, not the
 > Pages "Connect to Git" wizard.
+>
+> 🪤 **Deploying this repo through a Cloudflare Pages project will 404.** Every
+> route is `prerender = false` (SSR), so `astro build` emits **no**
+> `dist/client/index.html` — there is literally nothing at `/` for Pages' static
+> file serving to return. The real app lives in `dist/server/entry.mjs`, which
+> Pages static serving ignores. If your dashboard shows a **Pages** project
+> `ai-100ideas` serving this repo and the domain 404s, that is expected — follow
+> §2.4 to migrate to the Worker.
 
 - Production URL: https://ai.100ideas.net
 - Repo: https://github.com/crazynotesman-svg/ai-100ideas
@@ -71,6 +79,33 @@ exists but `ai.100ideas.net` still 404s.
 - Cloudflare provisions a cert automatically; wait for it to go "Active".
 - If the domain is NOT on Cloudflare, move it to Cloudflare first (or use a
   `routes` entry pointing at a Cloudflare-managed zone).
+
+> 🪤 **If `ai.100ideas.net` is currently bound to a Pages project** (the 404
+> symptom you are hitting), you must free the hostname first — a custom domain
+> can only live on one resource. See **§2.4** for the exact detach steps.
+
+### 2.4 Migrating from a stale Cloudflare Pages project
+
+If you (or a previous attempt) created a **Pages** project `ai-100ideas` and
+connected the repo / custom domain to it, that project is what is 404ing. It
+cannot serve this Worker-based build. Migrate the hostname to the Worker:
+
+1. **Deploy the Worker first** (§3) so `ai-100ideas` exists as a Worker. Without
+   this there is nothing to point the domain at.
+2. **Free the hostname on Pages:** Cloudflare dashboard → **Workers & Pages →
+   ai-100ideas** (the *Pages* one) → **Custom domains** → delete
+   `ai.100ideas.net`. This only detaches the domain; it does not delete DNS.
+3. **Attach it to the Worker:** **Workers & Pages → ai-100ideas** (the *Worker*
+   one) → **Triggers → Custom Domains → Add** → `ai.100ideas.net`. Cloudflare
+   reuses the existing DNS record (no DNS edit needed) and issues a cert.
+4. Wait for the domain status to reach **Active** (1–5 min), then visit
+   `https://ai.100ideas.net`.
+5. *(optional)* Delete the now-orphaned Pages project from **Workers & Pages →
+   ai-100ideas (Pages) → Settings → Delete**.
+
+> If you skip step 2, Cloudflare will still let you add the domain to the Worker
+> but may show a "already in use by another resource" warning — confirming the
+> detach in step 2 avoids the conflict entirely.
 
 ---
 
@@ -170,7 +205,7 @@ npm run check    # astro check (must report 0 errors before pushing)
 
 | Symptom | Cause / Fix |
 |---|---|
-| `ai.100ideas.net` returns a **bare 404 / empty body** | Site was never deployed, OR the custom domain was never connected to the Worker (§2.3). `wrangler deploy` + add the domain. |
+| `ai.100ideas.net` returns a **bare 404 / empty body** | Most likely deployed via a **Cloudflare Pages** project (wrong model for this repo — see intro 🪤). Pages serves `dist/` as static files but the SSR home was never prerendered, so `/` is empty. Fix: deploy as a **Worker** (§3) and migrate the domain (§2.4). Also possible: the Worker was never deployed, or the custom domain was never connected (§2.3). |
 | Worker live at `*.workers.dev` but **custom domain 404s** | Custom domain not added in Workers → Settings → Domains & Routes. |
 | Homepage shows "No tools indexed yet" | D1 is empty — run the daily-sync workflow once (it's been hardened; DeepSeek timeouts no longer produce an empty SQL crash). |
 | `SQL code did not contain a statement` | Old bug, fixed. Re-run the hardened pipeline. |
