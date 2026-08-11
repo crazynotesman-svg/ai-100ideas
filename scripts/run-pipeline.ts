@@ -140,6 +140,9 @@ async function main(): Promise<void> {
 
   const enriched: EnrichedTool[] = [];
   let failed = 0;
+  // Throttle DeepSeek calls to 3 concurrent requests. This keeps us well under
+  // DeepSeek's rate limits and avoids the bulk timeouts that previously left
+  // the pipeline with zero enriched rows (and thus an empty SQL file).
   await pLimit(
     limited.map(
       (r) => async () => {
@@ -154,7 +157,7 @@ async function main(): Promise<void> {
         }
       },
     ),
-    4,
+    3,
   );
 
   const sql = buildUpsertStatements(enriched);

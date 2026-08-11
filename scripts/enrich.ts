@@ -17,6 +17,9 @@ import { repoSlug, sleep } from './util';
 
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 const MODEL = 'deepseek-chat';
+/** Per-request timeout for the DeepSeek API. 30s gives the model room to think
+ *  without leaving the pipeline hanging, and pairs with the retry/backoff below. */
+const DEEPSEEK_TIMEOUT_MS = 30_000;
 
 const SYSTEM_PROMPT = `You are a metadata extraction engine for an open-source AI tools & MCP server directory (ai.100ideas.net).
 Given a GitHub repository's name, description, README and topics, extract structured, SEO-friendly metadata.
@@ -46,33 +49,44 @@ export interface EnrichConfig {
 }
 
 export async function enrichRepo(repo: RawRepo, cfg: EnrichConfig = {}): Promise<EnrichedTool> {
-  const apiKey = cfg.apiKey ?? process.env.DEEPSEEK_API_KEY;
   const slug = repoSlug(repo.fullName);
 
-  if (!apiKey || cfg.forceFallback) {
-    return buildFallback(repo, slug, apiKey ? 'forced' : 'no API key');
-  }
+  // Absolute safety net: metadata extraction must NEVER crash the pipeline.
+  // Any unexpected error falls back to deterministic heuristics so the sync
+  // step always has valid rows to upsert (never an empty SQL file).
+  try {
+    const apiKey = cfg.apiKey ?? process.env.DEEPSEEK_API_KEY;
 
-  const userPrompt = buildUserPrompt(repo);
-  let lastErr: unknown;
-  const attempts = cfg.retries ?? 2;
-  for (let attempt = 0; attempt <= attempts; attempt++) {
-    try {
-      const parsed = await callDeepSeek(apiKey, userPrompt, cfg.timeoutMs ?? 30_000);
-      const validated = validateEnrichment(parsed, repo);
-      return { repo, enrichment: validated, slug, createdFromFallback: false };
-    } catch (err) {
-      lastErr = err;
-      console.warn(
-        `[enrich] attempt ${attempt + 1} failed for ${repo.fullName}: ${(err as Error).message}`,
-      );
-      if (attempt < attempts) await sleep(800 * (attempt + 1));
+    if (!apiKey || cfg.forceFallback) {
+      return buildFallback(repo, slug, apiKey ? 'forced' : 'no API key');
     }
+
+    const userPrompt = buildUserPrompt(repo);
+    let lastErr: unknown;
+    const attempts = cfg.retries ?? 2;
+    for (let attempt = 0; attempt <= attempts; attempt++) {
+      try {
+        const parsed = await callDeepSeek(apiKey, userPrompt, cfg.timeoutMs ?? DEEPSEEK_TIMEOUT_MS);
+        const validated = validateEnrichment(parsed, repo);
+        return { repo, enrichment: validated, slug, createdFromFallback: false };
+      } catch (err) {
+        lastErr = err;
+        console.warn(
+          `[enrich] attempt ${attempt + 1} failed for ${repo.fullName}: ${(err as Error).message}`,
+        );
+        if (attempt < attempts) await sleep(800 * (attempt + 1));
+      }
+    }
+    console.warn(
+      `[enrich] giving up on ${repo.fullName}, using fallback. Last error: ${(lastErr as Error)?.message}`,
+    );
+    return buildFallback(repo, slug, 'max retries exceeded');
+  } catch (err) {
+    console.warn(
+      `[enrich] unexpected error for ${repo.fullName}, using fallback: ${(err as Error).message}`,
+    );
+    return buildFallback(repo, slug, 'unexpected error');
   }
-  console.warn(
-    `[enrich] giving up on ${repo.fullName}, using fallback. Last error: ${(lastErr as Error)?.message}`,
-  );
-  return buildFallback(repo, slug, 'max retries exceeded');
 }
 
 async function callDeepSeek(apiKey: string, userPrompt: string, timeoutMs: number): Promise<unknown> {

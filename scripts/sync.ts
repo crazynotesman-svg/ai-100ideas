@@ -32,6 +32,16 @@ function prettyCategory(slug: string): string {
     .join(' ');
 }
 
+/**
+ * Returns true only if the statement list contains at least one
+ * non-blank SQL statement. Guards against empty arrays AND arrays that
+ * are filled with whitespace-only strings (which would otherwise make
+ * Wrangler / D1 complain with "SQL code did not contain a statement").
+ */
+function hasStatements(sql: string[]): boolean {
+  return Array.isArray(sql) && sql.some((s) => typeof s === 'string' && s.trim().length > 0);
+}
+
 export function buildCategoryStatements(items: EnrichedTool[]): string[] {
   const seen = new Map<string, string>(); // slug -> name
   for (const it of items) {
@@ -88,8 +98,8 @@ export function writeSqlFile(sql: string[], cacheDir = 'scripts/.cache', name = 
 /** Apply statements to D1. No-op when `dryRun` is true. */
 export async function applyToD1(sql: string[], opts: SyncOptions = {}): Promise<void> {
   if (opts.dryRun) return;
-  if (sql.length === 0) {
-    console.log('[sync] no statements to apply.');
+  if (!hasStatements(sql)) {
+    console.log('[sync] No SQL statements to execute. Skipping D1 execution.');
     return;
   }
   const method =
@@ -102,6 +112,10 @@ export async function applyToD1(sql: string[], opts: SyncOptions = {}): Promise<
 }
 
 async function applyViaRest(sql: string[]): Promise<void> {
+  if (!hasStatements(sql)) {
+    console.log('[sync] No SQL statements to execute. Skipping D1 REST execution.');
+    return;
+  }
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID;
   const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -131,6 +145,10 @@ async function applyViaRest(sql: string[]): Promise<void> {
 }
 
 async function applyViaWrangler(sql: string[], cacheDir?: string): Promise<void> {
+  if (!hasStatements(sql)) {
+    console.log('[sync] No SQL statements to execute. Skipping wrangler execution.');
+    return;
+  }
   const dir = cacheDir ?? 'scripts/.cache';
   const file = writeSqlFile(sql, dir, `sync-${Date.now()}.sql`);
   await new Promise<void>((resolve, reject) => {
