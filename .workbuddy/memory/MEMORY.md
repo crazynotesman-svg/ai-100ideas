@@ -25,7 +25,9 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
 - 推送必须靠用户提供的 **PAT**：`repo` 权限管代码，`workflow` 权限才能推 `.github/workflows/*`（否则 GitHub 拒绝）
 - 推送后务必把 token 从 `remote.origin.url` 和 `branch.main.remote` 抹掉（`git remote set-url` + `git config branch.main.remote origin`）
 - 本地初始分支 `master` 已改名 `main` 以对齐 GitHub 默认与用户其他仓库
-- Cloudflare Pages 部署：构建 `npm run build`，绑定 D1 `DB`（database_id 已在 `wrangler.toml`）
+- **部署模型 = Cloudflare Worker（带 Assets），不是 Pages！** `astro build` 产出 `dist/server/entry.mjs`（Worker）+ `dist/client/`（静态资源），由 `dist/server/wrangler.json` 驱动。正确部署：`cd dist/server && npx wrangler deploy`。自动部署见 `.github/workflows/deploy.yml`（push 到 main 触发）。
+- 部署后**必须**在 Cloudflare 后台把自定义域名 `ai.100ideas.net` 接入该 Worker（Workers → ai-100ideas → Settings → Domains & Routes），否则域名 404。
+- `CLOUDFLARE_API_TOKEN` 需同时有 **Workers:Edit + D1:Edit**；`wrangler.toml` 里 `database_id` 已填（`05d5d4dd-...`）。
 
 ## 待办（后续阶段）
 
