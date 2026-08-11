@@ -213,6 +213,7 @@ npm run check    # astro check (must report 0 errors before pushing)
 | `wrangler deploy` → `workers.api.account... 403` | `CLOUDFLARE_API_TOKEN` lacks `Workers:Edit`. Regenerate the token with that permission. |
 | `refusing to allow a PAT ... without 'workflow' scope` | Pushing a workflow file needs a PAT with the `workflow` scope. |
 | `database_id` mismatch | `wrangler.toml` and `CLOUDFLARE_D1_DATABASE_ID` secret must match. |
+| `wrangler deploy` → `Found both a user configuration file ... and a deploy configuration file ... do not share the same base path` | Stale `.wrangler/deploy/config.json` written by the D1 migrate step (run from the repo root) clashes with `dist/server/wrangler.json`. The `deploy.yml` already removes it before `wrangler deploy`; locally, `rm -rf ../../.wrangler .wrangler` then re-run `wrangler deploy` from `dist/server`. |
 
 ---
 
