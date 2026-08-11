@@ -50,5 +50,5 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
-          SYNC_METHOD: ${{ secrets.SYNC_METHOD || 'rest' }}
+          SYNC_METHOD: ${{ secrets.SYNC_METHOD || 'wrangler' }}
         run: npx tsx scripts/run-pipeline.ts
