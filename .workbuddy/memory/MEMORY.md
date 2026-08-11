@@ -29,8 +29,12 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
 - 部署后**必须**在 Cloudflare 后台把自定义域名 `ai.100ideas.net` 接入该 Worker（Workers → ai-100ideas → Settings → Domains & Routes），否则域名 404。
 - `CLOUDFLARE_API_TOKEN` 需同时有 **Workers:Edit + D1:Edit**；`wrangler.toml` 里 `database_id` 已填（`05d5d4dd-...`）。
 
+## 站点状态
+- **已上线**：https://ai.100ideas.net/ 正常访问，D1 数据由 daily-sync 灌满（354 tools / 247 MCP / 7 分类，截至 2026-08-12）。部署模型 = Cloudflare Worker（带 Assets）。
+
 ## 待办（后续阶段）
 
 - Phase 2：工具/MCP 列表页、分类页、"open source alternative to X" 落地页
 - Phase 3：提交队列、GitHub star 同步 Worker
 - 用设计稿或动态 OG 接口替换 `public/og-default.png` 占位图
+- 🔒 安全收尾：GitHub 上 Revoke 历史会话用的临时 PAT `ghp_Kqp3...`（已含 repo+workflow 作用域）

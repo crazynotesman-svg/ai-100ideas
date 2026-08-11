@@ -3,6 +3,10 @@
  * ToolCard — compact directory card for a single tool.
  * Renders name, stars, license / MCP badges, one-liner, tech-stack tags and
  * "alternative to" links. Carries data-* attributes for client-side filtering.
+ *
+ * The whole card is clickable: the tool-name link uses a "stretched link"
+ * overlay (::after) so any click on the card opens the tool page. Interactive
+ * children (the "Alternative to" links) sit above the overlay via `relative z-10`.
  */
 import type { Tool } from '../db/schema';
 import { categoryLabel, formatStars, slugify } from '../lib/format';
@@ -28,14 +32,19 @@ const searchBlob = [
 ---
 
 <article
-  class="tool-card group flex flex-col rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm"
+  class="tool-card group relative flex cursor-pointer flex-col rounded-xl border border-slate-200 bg-white p-5 transition duration-150 hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-md"
   data-name={tool.name.toLowerCase()}
   data-category={tool.categoryId ?? ''}
   data-tags={searchBlob}
 >
   <div class="flex items-start justify-between gap-3">
     <h3 class="text-base font-semibold text-slate-900">
-      <a href={`/tool/${tool.slug}`} class="transition hover:text-indigo-600">{tool.name}</a>
+      <a
+        href={`/tool/${tool.slug}`}
+        class="rounded after:absolute after:inset-0 after:content-[''] transition group-hover:text-indigo-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+      >
+        {tool.name}
+      </a>
     </h3>
     <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {tool.isMcp && (
@@ -81,7 +90,7 @@ const searchBlob = [
         {alts.slice(0, 4).map((a) => (
           <a
             href={`/alternative-to/${slugify(a)}`}
-            class="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-100"
+            class="relative z-10 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 transition hover:bg-emerald-100"
           >
             {a}
           </a>
