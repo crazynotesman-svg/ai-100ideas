@@ -12,6 +12,14 @@ export default defineConfig({
   // Static by default; individual routes opt into SSR with
   // `export const prerender = false` when they need request-time D1 access.
   output: 'static',
+
+  // Disable Astro Sessions. This site is a read-only directory and uses no
+  // server-side sessions (no ViewTransitions / client routing either), so we
+  // turn it off to avoid the @astrojs/cloudflare adapter auto-provisioning a
+  // `SESSION` KV namespace binding — which would otherwise require the deploy
+  // token to carry `Workers KV Storage: Edit`.
+  session: false,
+
   adapter: cloudflare({
     imageService: 'compile',
     // Prerender static routes in Node instead of spawning workerd at build time.

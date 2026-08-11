@@ -6,6 +6,8 @@
 #
 # Required repository secrets (Settings -> Secrets and variables -> Actions):
 #   CLOUDFLARE_API_TOKEN      CF token with Workers:Edit + D1:Edit
+#                              (Astro Sessions are disabled in astro.config.mjs,
+#                               so no KV storage permission is needed)
 #   CLOUDFLARE_ACCOUNT_ID     Cloudflare account id
 #
 # After the Worker is live, connect the custom domain `ai.100ideas.net` once in

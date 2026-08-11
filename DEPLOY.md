@@ -140,7 +140,10 @@ so the tables always exist. Pushing this file requires a PAT with the
 **`workflow`** scope (it adds a workflow).
 
 > Note: the `CLOUDFLARE_API_TOKEN` must include `Workers:Edit` (not just
-> `D1:Edit`) for `wrangler deploy` to succeed.
+> `D1:Edit`) for `wrangler deploy` to succeed. `Workers KV Storage: Edit` is
+> **NOT** required because Astro Sessions are disabled in `astro.config.mjs`
+> (`session: false`), so the adapter won't auto-provision a `SESSION` KV
+> namespace. If you later enable sessions, add that permission too.
 
 ---
 
