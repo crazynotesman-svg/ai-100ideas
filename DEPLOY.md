@@ -2,8 +2,8 @@
 
 Open-source AI tools & MCP server directory. Astro 7 (static + selective SSR)
 deployed to **Cloudflare Workers (with Assets)**, with data in **Cloudflare D1**
-(SQLite), kept fresh by a daily GitHub Actions pipeline (GitHub search →
-DeepSeek enrichment → D1 upsert).
+(SQLite), kept fresh by a twice-weekly GitHub Actions pipeline (GitHub search →
+DeepSeek enrichment → D1 upsert). See §5 for its cost-control model.
 
 > ⚠️ **This is a Cloudflare Worker, NOT Cloudflare Pages.** The build output is
 > `dist/server/entry.mjs` (the Worker) + `dist/client/` (static assets), driven
@@ -164,15 +164,47 @@ Two workflows use secrets — `deploy.yml` (build + deploy) and `daily-sync.yml`
 
 ---
 
-## 5. The daily sync pipeline
+## 5. The content sync pipeline
 
-`.github/workflows/daily-sync.yml`:
+`.github/workflows/daily-sync.yml` (filename kept for history; the schedule is
+no longer daily):
 
-- **Trigger:** `0 2 * * *` UTC daily (10:00 Beijing), plus manual
-  `workflow_dispatch`.
+- **Trigger:** `0 2 * * 1,4` UTC — Mondays and Thursdays, 10:00 Beijing — plus
+  manual `workflow_dispatch`.
 - **What it does:** `npm ci`, then `npx tsx scripts/run-pipeline.ts` — searches
   GitHub for AI/MCP repos, enriches each with DeepSeek (or a fallback), and
   upserts rows into D1.
+
+### Cost control (DeepSeek tokens)
+
+DeepSeek enrichment is the only metered step: **~2k input tokens per repo**.
+GitHub search returns ~350 repos, so an unguarded full run costs ~700k tokens.
+Four mechanisms keep that down:
+
+| Mechanism | Where | Effect |
+| --- | --- | --- |
+| Dedup cache persisted across CI runs | `actions/cache` step → `scripts/.cache` | Steady state only enriches genuinely **new** repos (typically <20/run) |
+| Popularity-scaled re-enrich bar | `needsProcessing()` in `run-pipeline.ts` | Needs `max(200 stars, 15%)` movement — a 40k-star repo no longer re-triggers on routine growth |
+| 30-day cooldown | `MIN_REFRESH_DAYS` | A repo can't be re-enriched more than once a month regardless of stars |
+| Per-run ceiling | `MAX_REPOS` env (default `60`) | Worst-case cost is bounded; the overflow rolls into the next run and backfills |
+
+Plus `ENRICH_README_CHARS` (default `6000`) caps how much README text is sent —
+that slice is the bulk of the per-call token cost.
+
+> **Do not remove the `actions/cache` step.** `scripts/.cache/` is gitignored, so
+> without it every run starts with an empty cache and re-enriches the entire
+> catalogue. That was the original behaviour and it burned ~1.2M tokens *per day*.
+> The pipeline log prints `dedup cache is EMPTY` when this regresses, and every
+> run ends with an `est. DeepSeek input tokens: ~N` line for quick monitoring.
+
+**Why twice a week and not weekly?** GitHub evicts Actions caches after 7 days
+without access. An exactly-weekly cron sits on that boundary and keeps losing
+the dedup state — which costs far more than the extra run saves.
+
+**Tuning:** edit the `cron` line to change frequency. For a one-off full refresh
+after a prompt/schema change, run the workflow manually with
+**`force_reenrich = true`** (and consider raising `max_repos`) — expensive but
+deliberate. Locally: `npx tsx scripts/run-pipeline.ts --force --max-repos 20`.
 
 ### Resilience (added after the empty-SQL incident)
 
@@ -212,7 +244,8 @@ npm run check    # astro check (must report 0 errors before pushing)
 | Worker live at `*.workers.dev` but **custom domain 404s** | Custom domain not added in Workers → Settings → Domains & Routes. |
 | Homepage shows "No tools indexed yet" | D1 is empty — run the daily-sync workflow once (it's been hardened; DeepSeek timeouts no longer produce an empty SQL crash). |
 | `SQL code did not contain a statement` | Old bug, fixed. Re-run the hardened pipeline. |
-| `daily-sync` produces no new rows | `DEEPSEEK_API_KEY` empty → fallback rows only (still valid). Or tables missing → `npm run db:migrate:remote`. |
+| `daily-sync` produces no new rows | `DEEPSEEK_API_KEY` empty → fallback rows only (still valid). Or tables missing → `npm run db:migrate:remote`. Note: "0 to enrich, N skipped by cache" is **normal and desirable** — it means the dedup cache is working (§5). |
+| DeepSeek bill way higher than expected | Check the sync log for `dedup cache is EMPTY`. That means the `actions/cache` step didn't restore `scripts/.cache`, so the whole catalogue got re-enriched. Verify the cache step exists and its `restore-keys` prefix matches (§5). |
 | `wrangler deploy` → `workers.api.account... 403` | `CLOUDFLARE_API_TOKEN` lacks `Workers:Edit`. Regenerate the token with that permission. |
 | `refusing to allow a PAT ... without 'workflow' scope` | Pushing a workflow file needs a PAT with the `workflow` scope. |
 | `database_id` mismatch | `wrangler.toml` and `CLOUDFLARE_D1_DATABASE_ID` secret must match. |

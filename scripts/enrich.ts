@@ -20,6 +20,14 @@ const MODEL = 'deepseek-chat';
 /** Per-request timeout for the DeepSeek API. 30s gives the model room to think
  *  without leaving the pipeline hanging, and pairs with the retry/backoff below. */
 const DEEPSEEK_TIMEOUT_MS = 30_000;
+/**
+ * How much of the README we feed the model. This is the dominant input-token
+ * cost per repo (~1 token per 4 chars), and metadata worth extracting lives in
+ * the first screenful anyway — badges, tagline, features, install. 6k chars is
+ * a deliberate cost/quality trade-off; raise via ENRICH_README_CHARS if the
+ * extraction quality visibly suffers.
+ */
+const README_PROMPT_CHARS = Number(process.env.ENRICH_README_CHARS ?? '') || 6_000;
 
 const SYSTEM_PROMPT = `You are a metadata extraction engine for an open-source AI tools & MCP server directory (ai.100ideas.net).
 Given a GitHub repository's name, description, README and topics, extract structured, SEO-friendly metadata.
@@ -236,7 +244,9 @@ function buildFallback(repo: RawRepo, slug: string, reason: string): EnrichedToo
 }
 
 function buildUserPrompt(repo: RawRepo): string {
-  const readme = repo.readme ? repo.readme.slice(0, 10_000) : '(README not available)';
+  const readme = repo.readme
+    ? repo.readme.slice(0, README_PROMPT_CHARS)
+    : '(README not available)';
   return [
     `Repository: ${repo.fullName}`,
     `Name: ${repo.name}`,

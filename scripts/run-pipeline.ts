@@ -25,23 +25,51 @@ import { enrichRepo } from './enrich';
 import { applyToD1, buildUpsertStatements, writeSqlFile } from './sync';
 
 const CACHE_FILE = 'scripts/.cache/seen.json';
-/** Re-process a repo when its star count moves by at least this much. */
-const STAR_CHANGE_THRESHOLD = 50;
+
+// ---------------------------------------------------------------------------
+// Cost control
+// ---------------------------------------------------------------------------
+// The DeepSeek enrichment call is the only metered step in this pipeline
+// (~3.5k input tokens per repo). Every knob below exists to avoid paying twice
+// for a repo we already understand.
+//
+// IMPORTANT: these only help if `scripts/.cache/seen.json` survives between
+// runs. The directory is gitignored, so CI MUST restore/save it (see
+// .github/workflows/daily-sync.yml `actions/cache` step) — otherwise every run
+// starts with an empty cache and re-enriches the entire catalogue.
+
+/** Re-enrich when stars move by at least this many, in absolute terms. */
+const STAR_CHANGE_ABS = 200;
+/** ...or by this fraction of the cached count — whichever bar is HIGHER. */
+const STAR_CHANGE_RATIO = 0.15;
+/** Hard cooldown: never re-enrich the same repo sooner than this. */
+const MIN_REFRESH_DAYS = 30;
 
 interface CliArgs {
   dryRun: boolean;
   maxRepos: number;
   noEnrich: boolean;
+  force: boolean;
   topics?: string[];
   help: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { dryRun: false, maxRepos: 0, noEnrich: false, help: false };
+  // Env provides the default so CI can tune the ceiling without editing code;
+  // an explicit CLI flag always wins.
+  const envMax = Number(process.env.MAX_REPOS ?? '') || 0;
+  const args: CliArgs = {
+    dryRun: false,
+    maxRepos: envMax,
+    noEnrich: false,
+    force: process.env.FORCE_REENRICH === 'true',
+    help: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run' || a === '-d') args.dryRun = true;
     else if (a === '--no-enrich') args.noEnrich = true;
+    else if (a === '--force') args.force = true;
     else if (a === '--help' || a === '-h') args.help = true;
     else if (a === '--max-repos') args.maxRepos = Number(argv[++i]) || 0;
     else if (a.startsWith('--max-repos=')) args.maxRepos = Number(a.split('=')[1]) || 0;
@@ -56,8 +84,9 @@ function printHelp(): void {
 
 Flags:
   --dry-run        Build SQL, write to scripts/.cache/dry-run.sql, do NOT touch D1.
-  --max-repos N    Process at most N repos this run (0 = no cap).
+  --max-repos N    Process at most N repos this run (0 = no cap). Cost ceiling.
   --no-enrich      Skip DeepSeek; use the deterministic fallback metadata.
+  --force          Ignore the dedup cache and re-enrich everything (EXPENSIVE).
   --topic X        Search topic override (repeatable). Default: mcp-server, mcp, ai-agent, self-hosted-ai.
   --help           Show this message.
 
@@ -67,6 +96,9 @@ Environment:
   GITHUB_FIXTURE        Path to a JSON fixture (RawRepo[]) to run fully offline.
   CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_D1_DATABASE_ID  (REST sync)
   SYNC_METHOD           'rest' (default) | 'wrangler'
+  MAX_REPOS             Default for --max-repos (cost ceiling per run).
+  FORCE_REENRICH        'true' behaves like --force.
+  ENRICH_README_CHARS   README chars sent to the model (default 6000).
 `);
 }
 
@@ -90,10 +122,23 @@ function saveCache(cache: Record<string, CacheEntry>): void {
   writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
 }
 
+/**
+ * Decide whether a repo is worth spending a DeepSeek call on.
+ *
+ * Brand-new repos always are. Known repos only qualify once they are out of the
+ * cooldown window AND their star count has moved meaningfully — the bar scales
+ * with popularity so a 30k-star project doesn't re-trigger every week just
+ * because it gained a few hundred stars.
+ */
 function needsProcessing(repo: RawRepo, cache: Record<string, CacheEntry>): boolean {
   const entry = cache[repoSlug(repo.fullName)];
   if (!entry) return true;
-  return Math.abs(repo.stars - entry.stars) >= STAR_CHANGE_THRESHOLD;
+
+  const ageDays = (Date.now() / 1000 - entry.updatedAt) / 86_400;
+  if (ageDays < MIN_REFRESH_DAYS) return false;
+
+  const threshold = Math.max(STAR_CHANGE_ABS, entry.stars * STAR_CHANGE_RATIO);
+  return Math.abs(repo.stars - entry.stars) >= threshold;
 }
 
 async function main(): Promise<void> {
@@ -118,12 +163,28 @@ async function main(): Promise<void> {
   log.info(`fetched ${repos.length} candidate repos.`);
 
   const cache = loadCache();
-  const toProcess = repos.filter((r) => needsProcessing(r, cache));
-  const skipped = repos.length - toProcess.length;
+  const cacheSize = Object.keys(cache).length;
+  if (cacheSize === 0) {
+    log.info(
+      'dedup cache is EMPTY — every repo counts as new. In CI this means the ' +
+        'actions/cache step failed to restore scripts/.cache; expect a full-price run.',
+    );
+  } else {
+    log.info(`dedup cache loaded: ${cacheSize} known repos.`);
+  }
 
+  const toProcess = args.force ? repos : repos.filter((r) => needsProcessing(r, cache));
+  const skipped = repos.length - toProcess.length;
+  if (args.force) log.info('--force set: bypassing dedup cache (full re-enrich).');
+
+  // Repos arrive sorted by stars (desc), so slicing keeps the highest-signal
+  // ones first; the rest naturally roll into the next run's batch.
   let limited = toProcess;
   if (args.maxRepos > 0 && toProcess.length > args.maxRepos) {
-    log.info(`limiting to ${args.maxRepos} of ${toProcess.length} due to --max-repos.`);
+    log.info(
+      `cost ceiling: limiting to ${args.maxRepos} of ${toProcess.length} candidates ` +
+        `(remaining ${toProcess.length - args.maxRepos} roll over to the next run).`,
+    );
     limited = toProcess.slice(0, args.maxRepos);
   }
   log.info(`${limited.length} to enrich (${skipped} skipped by cache).`);
@@ -210,6 +271,12 @@ async function main(): Promise<void> {
   console.log('\n=== SYNC SUMMARY ===');
   console.log(
     `fetched=${stats.fetched} processed=${stats.afterDedup} enriched=${stats.enriched} skipped=${stats.skipped} failed=${stats.failed} applied=${stats.applied}`,
+  );
+  // Rough cost signal so a runaway run is obvious in the Actions log without
+  // opening the DeepSeek dashboard. ~2k input tokens per enriched repo.
+  console.log(
+    `est. DeepSeek input tokens: ~${(stats.enriched * 2_000).toLocaleString('en-US')} ` +
+      `(${stats.skipped} repos skipped by cache saved ~${(stats.skipped * 2_000).toLocaleString('en-US')})`,
   );
 }
 

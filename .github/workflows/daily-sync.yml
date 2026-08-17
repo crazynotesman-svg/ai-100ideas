@@ -1,23 +1,53 @@
-# Daily ingestion + enrichment pipeline for ai.100ideas.net
+# Ingestion + enrichment pipeline for ai.100ideas.net
 #
-# Runs every day at 02:00 UTC and can be triggered manually.
+# SCHEDULE: twice a week (Mon + Thu, 02:00 UTC) — see "Why not weekly?" below.
+# Also runnable on demand via Actions -> Run workflow.
 #
+# ---------------------------------------------------------------------------
+# Cost model (read before changing the cron)
+# ---------------------------------------------------------------------------
+# The only metered step is DeepSeek enrichment: ~3.5k input tokens per repo.
+# The pipeline keeps a dedup cache at scripts/.cache/seen.json so a repo is
+# enriched once and then left alone (see run-pipeline.ts `needsProcessing`).
+#
+# That cache directory is gitignored, so WITHOUT the `actions/cache` step below
+# every run starts empty and re-enriches the whole catalogue (~350 repos,
+# ~1.2M tokens). Restoring it is what actually cuts the bill; the cron change
+# is secondary. Do not remove the cache step.
+#
+# Why not weekly? GitHub evicts caches after 7 days without access, so an
+# exactly-weekly schedule sits right on the eviction boundary and would keep
+# losing the dedup state. Two runs per week keeps it warm at ~3.5x less
+# frequency than the original daily cron. MAX_REPOS is the backstop if the
+# cache is ever lost anyway.
+#
+# ---------------------------------------------------------------------------
 # Required repository secrets (Settings -> Secrets and variables -> Actions):
-#   DEEPSEEK_API_KEY        DeepSeek API key
-#   CLOUDFLARE_API_TOKEN    Cloudflare API token with D1 edit permission
-#   CLOUDFLARE_ACCOUNT_ID   Cloudflare account id
+#   DEEPSEEK_API_KEY           DeepSeek API key
+#   CLOUDFLARE_API_TOKEN       Cloudflare API token with D1 edit permission
+#   CLOUDFLARE_ACCOUNT_ID      Cloudflare account id
 #   CLOUDFLARE_D1_DATABASE_ID  The D1 database id (from `wrangler d1 create`)
 #
 # The Actions token is injected automatically as `github.token` (NOT a repo
 # secret, so `secrets.GITHUB_TOKEN` would resolve to empty). It only raises the
 # GitHub Search API rate limit. Swap in a PAT via `${{ secrets.GH_PAT }}` if you
 # hit secondary-rate-limit errors during large crawls.
-name: Daily Sync (GitHub → DeepSeek → D1)
+name: Content Sync (GitHub → DeepSeek → D1)
 
 on:
   schedule:
-    - cron: '0 2 * * *' # 02:00 UTC daily
-  workflow_dispatch: {}
+    - cron: '0 2 * * 1,4' # 02:00 UTC every Monday and Thursday
+  workflow_dispatch:
+    inputs:
+      max_repos:
+        description: 'Max repos to enrich this run (cost ceiling; 0 = unlimited)'
+        required: false
+        default: '60'
+      force_reenrich:
+        description: 'Ignore the dedup cache and re-enrich everything (EXPENSIVE)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -41,6 +71,17 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Restores the dedup state from the previous run and saves an updated copy
+      # afterwards. The run_id in the key makes every run write a new entry;
+      # restore-keys then picks the most recent one by prefix.
+      - name: Restore dedup cache
+        uses: actions/cache@v4
+        with:
+          path: scripts/.cache
+          key: sync-dedup-${{ github.run_id }}
+          restore-keys: |
+            sync-dedup-
+
       - name: Install dependencies
         run: npm ci
 
@@ -52,4 +93,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
           SYNC_METHOD: ${{ secrets.SYNC_METHOD || 'wrangler' }}
+          # Hard ceiling on paid enrichment calls per run. Anything above the cap
+          # rolls over to the next run, so the catalogue still backfills.
+          MAX_REPOS: ${{ github.event.inputs.max_repos || '60' }}
+          FORCE_REENRICH: ${{ github.event.inputs.force_reenrich || 'false' }}
         run: npx tsx scripts/run-pipeline.ts
