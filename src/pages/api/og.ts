@@ -1,58 +1,35 @@
 /**
  * Dynamic OpenGraph social-card endpoint (/api/og).
  *
- * Edge-compatible PNG generator for Cloudflare Workers. Reads query params,
- * builds a 1200×630 SVG card (site branding, title, one-line description and
- * a stats badge of stars / license / tech stack) and rasterizes it to PNG via
- * `@resvg/resvg-wasm` (pure WASM, runs on workerd — no Node-native addons).
+ * Edge-compatible, zero-dependency SVG generator for Cloudflare Workers.
+ * Reads query params and returns a 1200×630 card with site branding, the
+ * title, a one-line description and a stats badge (stars / license / tech
+ * stack). No Node-native deps, no D1 access — it is a pure function of the
+ * request URL.
  *
- * Why PNG not SVG: Twitter/X, LinkedIn, Discord and Slack require a raster
- * `og:image` and will not render SVG. Query-param contract is unchanged from
- * the earlier SVG version.
+ * NOTE: SVG is the deliverable. Most social scrapers (Twitter/X, Facebook,
+ * Slack, Discord, LinkedIn) require a raster image (PNG/JPEG/WebP) and will
+ * NOT render SVG `og:image`, so this endpoint is a known "half-shipped" feature.
  *
- * Asset strategy:
- *  - The 2.4 MB wasm and the Inter font buffers (≈68 KB each) are emitted as
- *    Worker Assets and loaded once per isolate. The wasm is NEVER inlined —
- *    it would exceed the Worker script-size limit.
- *  - We fetch the bytes at runtime via a same-origin absolute URL. The Worker
- *    runs with `global_fetch_strictly_public`, but fetching our own public
- *    domain is allowed (verified: /_astro/* assets return 200). This avoids
- *    depending on the `ASSETS` binding, which is not reliably typed in the
- *    handwritten worker-configuration.d.ts.
- *  - Only Latin coverage is embedded; CJK glyphs in a description would fall
- *    back to tofu (rare for this dataset, which is overwhelmingly English).
+ * A PNG attempt (via `@resvg/resvg-wasm`) was built and REVERTED because
+ * Cloudflare Workers forbid runtime WASM compilation — `WebAssembly.instantiate`
+ * / `WebAssembly.compile` throw "Wasm code generation disallowed by embedder".
+ * The only supported path is a *pre-compiled* `WebAssembly.Module` obtained via
+ * a native `.wasm` import and a wrangler `[[rules]] type = "CompiledWasm"` rule.
+ * That is incompatible with Astro/Vite bundling as a one-file edit; it needs a
+ * dedicated build pipeline as its own scoped task.
+ *
+ * Reusable pieces from the attempt are already in place:
+ *   - `src/lib/og-fonts/{inter-400,inter-700}.ttf` (resvg rejects WOFF, so these
+ *     are WOFF→TTF conversions of @fontsource Inter)
+ *   - `@resvg/resvg-wasm` dependency (kept for the future pipeline)
+ * The query-param contract stays identical, so a later PNG swap is drop-in.
  */
 import type { APIRoute } from 'astro';
-
-import { Resvg, initWasm } from '@resvg/resvg-wasm';
-import wasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url';
-import inter400Url from '../../lib/og-fonts/inter-400.ttf?url';
-import inter700Url from '../../lib/og-fonts/inter-700.ttf?url';
 
 import { formatStars } from '../../lib/format';
 
 export const prerender = false;
-
-/** Load a Worker Asset (wasm/font) once and return its raw bytes. */
-async function loadAssetBytes(path: string, origin: string): Promise<Uint8Array> {
-  const res = await fetch(new URL(path, origin));
-  if (!res.ok) throw new Error(`Failed to load OG asset ${path}: ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
-}
-
-const fontUrls = [inter400Url, inter700Url];
-
-let wasmInit: Promise<void> | null = null;
-function ensureWasm(origin: string): Promise<void> {
-  if (!wasmInit) wasmInit = loadAssetBytes(wasmUrl, origin).then((bytes) => initWasm(bytes));
-  return wasmInit;
-}
-
-let fontBuffersPromise: Promise<Uint8Array[]> | null = null;
-function ensureFonts(origin: string): Promise<Uint8Array[]> {
-  if (!fontBuffersPromise) fontBuffersPromise = Promise.all(fontUrls.map((u) => loadAssetBytes(u, origin)));
-  return fontBuffersPromise;
-}
 
 const W = 1200;
 const H = 630;
@@ -142,10 +119,11 @@ interface Pill {
   accent: 'star' | 'neutral';
 }
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = ({ url }) => {
   const q = url.searchParams;
   const title = (q.get('title') ?? BRAND).slice(0, 120);
   const desc = (q.get('desc') ?? '').slice(0, 200);
+  const lang = q.get('lang') === 'zh' ? 'zh' : 'en';
   const starsRaw = q.get('stars');
   const stars = starsRaw != null ? Number.parseInt(starsRaw, 10) : NaN;
   const license = (q.get('license') ?? '').slice(0, 30);
@@ -155,10 +133,7 @@ export const GET: APIRoute = async ({ url }) => {
     .filter(Boolean)
     .slice(0, 3);
 
-  // Kept English so the PNG never depends on a CJK font (only Latin is
-  // embedded); tool names/descriptions in this dataset are overwhelmingly
-  // English, so this covers the dominant case.
-  const techLabel = 'Tech stack';
+  const techLabel = lang === 'zh' ? '技术栈' : 'Tech stack';
 
   /* --- background --- */
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">`;
@@ -237,33 +212,10 @@ export const GET: APIRoute = async ({ url }) => {
 
   svg += `</svg>`;
 
-  /* --- rasterize to PNG via WASM --- */
-  try {
-    await ensureWasm(url.origin);
-    const fontBuffers = await ensureFonts(url.origin);
-
-    const resvg = new Resvg(svg, {
-      font: {
-        fontBuffers,
-        defaultFontFamily: 'Inter',
-      },
-      fitTo: { mode: 'width', value: W },
-    });
-    const png = resvg.render();
-    const pngBytes = png.asPng();
-    // Copy into a fresh ArrayBuffer-backed view so the TS lib (Uint8Array<ArrayBuffer>)
-    // matches the Response BodyInit type regardless of the WASM return generic.
-    const body = new Uint8Array(pngBytes);
-
-    return new Response(body, {
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=86400, s-maxage=86400',
-        'Content-Length': String(body.length),
-      },
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err);
-    return new Response(msg, { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-  }
+  return new Response(svg, {
+    headers: {
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+    },
+  });
 };
