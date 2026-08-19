@@ -238,27 +238,32 @@ export const GET: APIRoute = async ({ url }) => {
   svg += `</svg>`;
 
   /* --- rasterize to PNG via WASM --- */
-  await ensureWasm(url.origin);
-  const fontBuffers = await ensureFonts(url.origin);
+  try {
+    await ensureWasm(url.origin);
+    const fontBuffers = await ensureFonts(url.origin);
 
-  const resvg = new Resvg(svg, {
-    font: {
-      fontBuffers,
-      defaultFontFamily: 'Inter',
-    },
-    fitTo: { mode: 'width', value: W },
-  });
-  const png = resvg.render();
-  const pngBytes = png.asPng();
-  // Copy into a fresh ArrayBuffer-backed view so the TS lib (Uint8Array<ArrayBuffer>)
-  // matches the Response BodyInit type regardless of the WASM return generic.
-  const body = new Uint8Array(pngBytes);
+    const resvg = new Resvg(svg, {
+      font: {
+        fontBuffers,
+        defaultFontFamily: 'Inter',
+      },
+      fitTo: { mode: 'width', value: W },
+    });
+    const png = resvg.render();
+    const pngBytes = png.asPng();
+    // Copy into a fresh ArrayBuffer-backed view so the TS lib (Uint8Array<ArrayBuffer>)
+    // matches the Response BodyInit type regardless of the WASM return generic.
+    const body = new Uint8Array(pngBytes);
 
-  return new Response(body, {
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=86400, s-maxage=86400',
-      'Content-Length': String(body.length),
-    },
-  });
+    return new Response(body, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+        'Content-Length': String(body.length),
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err);
+    return new Response(msg, { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
 };
