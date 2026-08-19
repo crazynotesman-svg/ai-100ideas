@@ -10,6 +10,7 @@
  */
 import type { Tool } from '../db/schema';
 import { categoryLabel, formatStars, slugify } from '../lib/format';
+import { getLang, useTranslations } from '../i18n/ui';
 
 interface Props {
   tool: Tool;
@@ -17,9 +18,12 @@ interface Props {
 
 const { tool } = Astro.props;
 
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
+
 const tags = tool.techStack ?? [];
 const alts = tool.alternativeTo ?? [];
-const cat = categoryLabel(tool.categoryId);
+const cat = categoryLabel(tool.categoryId, lang);
 const searchBlob = [
   tool.name,
   tool.oneLiner ?? '',
@@ -70,7 +74,7 @@ const searchBlob = [
     {tool.isOpenSource && (
       <>
         <span class="text-slate-300">·</span>
-        <span class="text-emerald-600">Open source</span>
+        <span class="text-emerald-600">{tr('card.openSource')}</span>
       </>
     )}
   </div>
@@ -90,7 +94,7 @@ const searchBlob = [
 
   {alts.length > 0 && (
     <div class="mt-3 border-t border-slate-100 pt-3">
-      <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">Alternative to</p>
+      <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">{tr('card.alternativeTo')}</p>
       <div class="mt-1.5 flex flex-wrap gap-1.5">
         {alts.slice(0, 4).map((a) => (
           <a

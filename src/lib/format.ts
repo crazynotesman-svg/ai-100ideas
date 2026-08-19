@@ -2,6 +2,7 @@
  * Small presentation helpers shared by Astro components and pages.
  * Pure functions, no Node/Drizzle imports — safe to use anywhere.
  */
+import type { Lang } from '../i18n/ui';
 
 /** Turn an arbitrary string into a URL-safe slug (lowercase, hyphenated). */
 export function slugify(input: string): string {
@@ -37,7 +38,23 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
-export function categoryLabel(slug: string | null | undefined): string {
-  if (!slug) return 'Uncategorized';
-  return CATEGORY_LABELS[slug] ?? slug;
+/** Localized category labels (zh). Mirrors CATEGORY_LABELS exactly. */
+export const CATEGORY_LABELS_ZH: Record<string, string> = {
+  'mcp-server': 'MCP 服务器',
+  'vector-db': '向量数据库',
+  'ai-agent': 'AI 智能体',
+  'developer-tool': '开发工具',
+  'self-hosted-ai': '自托管 AI',
+  'rag-framework': 'RAG 框架',
+  'llm-ops': 'LLM 运维',
+  other: '其他',
+};
+
+export function categoryLabel(
+  slug: string | null | undefined,
+  lang: Lang = 'en',
+): string {
+  if (!slug) return lang === 'zh' ? '未分类' : 'Uncategorized';
+  const map = lang === 'zh' ? CATEGORY_LABELS_ZH : CATEGORY_LABELS;
+  return map[slug] ?? slug;
 }

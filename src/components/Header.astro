@@ -1,9 +1,11 @@
 ---
 /**
  * Site header — sticky top nav.
- * Brand "100 Ideas AI" + primary nav + "Submit Tool" CTA.
+ * Brand "100 Ideas AI" + primary nav + language switcher + "Submit Tool" CTA.
  */
 import { GITHUB_URL, SITE_NAME, SUBMIT_TOOL_URL } from '../consts';
+import { getLang, useTranslations } from '../i18n/ui';
+import LanguageSwitcher from './LanguageSwitcher.astro';
 
 interface Props {
   /** Highlights the active nav item. */
@@ -12,12 +14,15 @@ interface Props {
 
 const { active = '' } = Astro.props;
 
+const lang = getLang(Astro);
+const t = useTranslations(lang);
+
 const nav = [
-  { href: '/', label: 'All Tools', key: 'home' as const },
-  { href: '/mcp', label: 'MCP Servers', key: 'mcp' as const },
-  { href: '/alternatives', label: 'Alternatives', key: 'alternatives' as const },
-  { href: '/tags', label: 'Tags', key: 'tags' as const },
-  { href: '/categories', label: 'Categories', key: 'categories' as const },
+  { href: '/', label: t('nav.allTools'), key: 'home' as const },
+  { href: '/mcp', label: t('nav.mcp'), key: 'mcp' as const },
+  { href: '/alternatives', label: t('nav.alternatives'), key: 'alternatives' as const },
+  { href: '/tags', label: t('nav.tags'), key: 'tags' as const },
+  { href: '/categories', label: t('nav.categories'), key: 'categories' as const },
 ];
 
 const navClass = (key: string) =>
@@ -30,7 +35,7 @@ const navClass = (key: string) =>
   <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
     <a href="/" class="flex items-center gap-2 font-semibold text-slate-900">
       <span class="grid h-8 w-8 place-items-center rounded-lg bg-indigo-600 text-sm font-bold text-white">100</span>
-      <span>100 Ideas AI</span>
+      <span>{t('header.brand')}</span>
     </a>
 
     <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
@@ -38,12 +43,13 @@ const navClass = (key: string) =>
     </nav>
 
     <div class="flex items-center gap-2">
+      <LanguageSwitcher />
       <a
         href={SUBMIT_TOOL_URL}
         class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-500"
         rel="noopener"
       >
-        Submit Tool
+        {t('header.submitTool')}
       </a>
       <a
         href={GITHUB_URL}

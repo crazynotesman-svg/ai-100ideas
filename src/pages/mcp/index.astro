@@ -7,18 +7,21 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import ToolCard from '../../components/ToolCard.astro';
 import { getMcpTools } from '../../db/queries';
+import { getLang, useTranslations } from '../../i18n/ui';
 import { SITE_URL } from '../../consts';
 
 export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const tools = await getMcpTools();
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'CollectionPage',
-  name: 'Model Context Protocol Servers & Tools',
-  description:
-    'A curated directory of open-source Model Context Protocol (MCP) servers and tools that plug into AI agents.',
+  name: tr('mcp.title'),
+  description: tr('mcp.subtitle'),
   url: `${SITE_URL}/mcp`,
   mainEntity: {
     '@type': 'ItemList',
@@ -33,9 +36,13 @@ const jsonLd = {
 ---
 
 <BaseLayout
-  title="Model Context Protocol Servers & Tools"
-  description="Browse open-source Model Context Protocol (MCP) servers and tools. Find MCP servers that plug into your AI agents and Claude, Cursor or custom clients."
+  title={tr('mcp.title')}
+  description={lang === 'zh'
+    ? '浏览开源的 Model Context Protocol（MCP）服务器与工具。寻找可接入你的 AI 智能体，以及 Claude、Cursor 或自定义客户端的 MCP 服务器。'
+    : 'Browse open-source Model Context Protocol (MCP) servers and tools. Find MCP servers that plug into your AI agents and Claude, Cursor or custom clients.'}
   keywords={['MCP servers', 'Model Context Protocol', 'MCP tools', 'AI agent tools', 'open source MCP']}
+  ogTitle={tr('mcp.title')}
+  ogKind="mcp"
   jsonLd={jsonLd}
 >
   <Header active="mcp" />
@@ -43,10 +50,10 @@ const jsonLd = {
   <main class="mx-auto max-w-6xl px-4 py-12">
     <header>
       <h1 class="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-        Model Context Protocol Servers &amp; Tools
+        {tr('mcp.title')}
       </h1>
       <p class="mt-3 max-w-2xl text-slate-600">
-        Open-source MCP servers that expose your data, APIs and tools to AI agents. {tools.length} server{tools.length === 1 ? '' : 's'} indexed.
+        {tr('mcp.subtitle')} {tools.length} {lang === 'zh' ? `个服务器已收录。` : `server${tools.length === 1 ? '' : 's'} indexed.`}
       </p>
     </header>
 
@@ -54,7 +61,7 @@ const jsonLd = {
       {
         tools.length === 0 ? (
           <p class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm text-slate-500">
-            No MCP servers indexed yet.
+            {tr('mcp.empty')}
           </p>
         ) : (
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

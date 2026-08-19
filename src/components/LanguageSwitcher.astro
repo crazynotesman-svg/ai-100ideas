@@ -1,0 +1,56 @@
+---
+/**
+ * LanguageSwitcher — a subtle EN | 中文 toggle in the header.
+ *
+ * Clicking sets a `site_lang` cookie (1-year lifetime) and reloads the current
+ * route so the SSR layer re-renders in the chosen language. No server round-trip
+ * is needed; the cookie is written client-side and read by `getLang()` on the
+ * next request.
+ */
+import { getLang } from '../i18n/ui';
+
+const lang = getLang(Astro);
+---
+
+<div
+  class="flex items-center rounded-lg border border-slate-200 p-0.5 text-xs font-medium"
+  role="group"
+  aria-label="Language"
+>
+  <button
+    type="button"
+    data-lang="en"
+    class:list={[
+      'rounded-md px-2 py-1 transition',
+      lang === 'en' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900',
+    ]}
+    aria-pressed={lang === 'en'}
+  >
+    EN
+  </button>
+  <span class="text-slate-300" aria-hidden="true">|</span>
+  <button
+    type="button"
+    data-lang="zh"
+    class:list={[
+      'rounded-md px-2 py-1 transition',
+      lang === 'zh' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900',
+    ]}
+    aria-pressed={lang === 'zh'}
+  >
+    中文
+  </button>
+</div>
+
+<script>
+  // Set the language cookie and reload so SSR picks up the new preference.
+  const MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+  document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = btn.getAttribute('data-lang');
+      if (next !== 'en' && next !== 'zh') return;
+      document.cookie = `site_lang=${next}; path=/; max-age=${MAX_AGE}; samesite=lax`;
+      location.reload();
+    });
+  });
+</script>

@@ -3,15 +3,19 @@
  * Site footer — copyright, tagline and legal / external links.
  */
 import { GITHUB_URL, SITE_NAME } from '../consts';
+import { getLang, useTranslations } from '../i18n/ui';
+
+const lang = getLang(Astro);
+const t = useTranslations(lang);
 
 const year = new Date().getFullYear();
 
 const links = [
-  { href: '/tags', label: 'Tags' },
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-  { href: '/sitemap.xml', label: 'Sitemap' },
-  { href: GITHUB_URL, label: 'GitHub', external: true },
+  { href: '/tags', label: t('footer.tags') },
+  { href: '/privacy', label: t('footer.privacy') },
+  { href: '/terms', label: t('footer.terms') },
+  { href: '/sitemap.xml', label: t('footer.sitemap') },
+  { href: GITHUB_URL, label: t('footer.github'), external: true },
 ];
 ---
 
@@ -21,12 +25,9 @@ const links = [
       <div>
         <div class="flex items-center gap-2 font-semibold text-slate-900">
           <span class="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-xs font-bold text-white">100</span>
-          <span>100 Ideas AI</span>
+          <span>{t('header.brand')}</span>
         </div>
-        <p class="mt-3 max-w-sm text-sm leading-relaxed text-slate-500">
-          A curated, open-source directory of AI tools and MCP servers. Find self-hostable
-          alternatives to popular AI products, compare tech stacks and licenses.
-        </p>
+        <p class="mt-3 max-w-sm text-sm leading-relaxed text-slate-500">{t('footer.tagline')}</p>
       </div>
 
       <nav class="flex flex-wrap gap-x-6 gap-y-2" aria-label="Footer">
@@ -40,6 +41,6 @@ const links = [
       </nav>
     </div>
 
-    <p class="mt-8 text-xs text-slate-400">© {year} {SITE_NAME}. All rights reserved.</p>
+    <p class="mt-8 text-xs text-slate-400">© {year} {SITE_NAME}. {t('footer.rights')}</p>
   </div>
 </footer>

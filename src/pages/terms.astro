@@ -1,43 +1,45 @@
 ---
 /**
- * /terms — static legal page.
+ * /terms — static legal page (SSR so it localizes with the language cookie).
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import { getLang, useTranslations } from '../i18n/ui';
+
+export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const updated = new Date().getFullYear();
 ---
 
-<BaseLayout title="Terms of Service" description="Terms of Service for 100 Ideas AI.">
+<BaseLayout
+  title={tr('terms.title')}
+  description={lang === 'zh' ? '100 Ideas AI 的服务条款。' : 'Terms of Service for 100 Ideas AI.'}
+  ogTitle={tr('terms.title')}
+  ogKind="default"
+>
   <Header />
   <main class="mx-auto max-w-3xl px-4 py-12">
-    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Terms of Service</h1>
-    <p class="mt-2 text-sm text-slate-500">Last updated: {updated}</p>
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">{tr('terms.title')}</h1>
+    <p class="mt-2 text-sm text-slate-500">{tr('terms.updated')} {updated}</p>
 
     <div class="mt-8 space-y-6 text-sm leading-relaxed text-slate-700">
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">Use of the directory</h2>
-        <p class="mt-2">
-          100 Ideas AI is provided "as is" for informational purposes. Listings describe third-party
-          open-source projects; we are not responsible for their content, availability or licensing.
-        </p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('terms.s1h')}</h2>
+        <p class="mt-2">{tr('terms.s1b')}</p>
       </section>
 
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">Accuracy</h2>
-        <p class="mt-2">
-          Metadata is generated automatically and may contain errors. Always verify license and
-          usage terms on the upstream repository before relying on a tool.
-        </p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('terms.s2h')}</h2>
+        <p class="mt-2">{tr('terms.s2b')}</p>
       </section>
 
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">Submissions</h2>
-        <p class="mt-2">
-          By submitting a tool you confirm you have the right to share it and that the information
-          provided is accurate to the best of your knowledge.
-        </p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('terms.s3h')}</h2>
+        <p class="mt-2">{tr('terms.s3b')}</p>
       </section>
     </div>
   </main>

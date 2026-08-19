@@ -6,40 +6,50 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { getCategoriesWithCounts } from '../../db/queries';
+import { getLang, useTranslations } from '../../i18n/ui';
 import { SITE_URL } from '../../consts';
 
 export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const counts = await getCategoriesWithCounts();
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'CollectionPage',
-  name: 'AI Tool Categories',
-  description: 'Browse open-source AI tools by category — MCP servers, agents, vector DBs and more.',
+  name: tr('cat.title'),
+  description: lang === 'zh'
+    ? '按分类浏览开源 AI 工具——MCP 服务器、智能体、向量数据库等。'
+    : 'Browse open-source AI tools by category — MCP servers, AI agents, vector databases, RAG frameworks, self-hosted AI and more.',
   url: `${SITE_URL}/categories`,
 };
 ---
 
 <BaseLayout
-  title="Categories"
-  description="Browse open-source AI tools by category — MCP servers, AI agents, vector databases, RAG frameworks, self-hosted AI and more."
+  title={tr('cat.title')}
+  description={lang === 'zh'
+    ? '按分类浏览开源 AI 工具——MCP 服务器、AI 智能体、向量数据库、RAG 框架、自托管 AI 等。'
+    : 'Browse open-source AI tools by category — MCP servers, AI agents, vector databases, RAG frameworks, self-hosted AI and more.'}
   keywords={['AI tool categories', 'MCP servers', 'AI agents', 'vector databases']}
+  ogTitle={tr('cat.title')}
+  ogKind="categories"
   jsonLd={jsonLd}
 >
   <Header active="categories" />
 
   <main class="mx-auto max-w-6xl px-4 py-12">
     <header>
-      <h1 class="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">Categories</h1>
-      <p class="mt-3 max-w-2xl text-slate-600">Browse the directory by what each tool does.</p>
+      <h1 class="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">{tr('cat.title')}</h1>
+      <p class="mt-3 max-w-2xl text-slate-600">{tr('cat.subtitle')}</p>
     </header>
 
     <section class="mt-8">
       {
         counts.length === 0 ? (
           <p class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm text-slate-500">
-            No categories yet.
+            {tr('cat.empty')}
           </p>
         ) : (
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

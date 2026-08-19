@@ -10,10 +10,14 @@ import Footer from '../../components/Footer.astro';
 import ToolCard from '../../components/ToolCard.astro';
 import { getToolBySlug, getRelatedTools } from '../../db/queries';
 import { categoryLabel, formatStars, slugify } from '../../lib/format';
+import { getLang, useTranslations } from '../../i18n/ui';
 import { parseDescription, renderMarkdown } from '../../lib/markdown';
 import { SITE_URL } from '../../consts';
 
 export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const { slug } = Astro.params;
 const tool = slug ? await getToolBySlug(slug) : undefined;
@@ -24,7 +28,7 @@ if (!tool) {
 
 const parsed = parseDescription(tool?.descriptionMd);
 const bodyHtml = renderMarkdown(parsed.lead);
-const cat = tool?.categoryId ? categoryLabel(tool.categoryId) : '';
+const cat = tool?.categoryId ? categoryLabel(tool.categoryId, lang) : '';
 const alts = tool?.alternativeTo ?? [];
 const related = tool ? await getRelatedTools(tool) : [];
 
@@ -49,7 +53,7 @@ const jsonLd = tool
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/` },
+          { '@type': 'ListItem', position: 1, name: tr('nav.home'), item: `${SITE_URL}/` },
           ...(tool.categoryId
             ? [{ '@type': 'ListItem' as const, position: 2, name: cat, item: `${SITE_URL}/category/${tool.categoryId}` }]
             : []),
@@ -61,9 +65,14 @@ const jsonLd = tool
 ---
 
 <BaseLayout
-  title={tool ? tool.name : 'Tool not found'}
-  description={tool?.oneLiner ?? 'The requested tool could not be found.'}
+  title={tool ? tool.name : tr('tool.notFound')}
+  description={tool?.oneLiner ?? tr('tool.notFoundDesc', { slug: slug ?? '' })}
   keywords={tool ? [tool.name, cat, ...(tool.techStack ?? [])] : undefined}
+  ogTitle={tool?.name}
+  ogKind="tool"
+  ogStars={tool?.stars}
+  ogLicense={tool?.license}
+  ogTags={tool?.techStack}
   jsonLd={jsonLd ?? undefined}
   noindex={!tool}
 >
@@ -72,17 +81,17 @@ const jsonLd = tool
   {
     !tool ? (
       <main class="mx-auto max-w-3xl px-4 py-24 text-center">
-        <h1 class="text-3xl font-semibold text-slate-900">Tool not found</h1>
-        <p class="mt-3 text-slate-600">We couldn't find a tool at “{slug}”.</p>
+        <h1 class="text-3xl font-semibold text-slate-900">{tr('tool.notFound')}</h1>
+        <p class="mt-3 text-slate-600">{tr('tool.notFoundDesc', { slug: slug ?? '' })}</p>
         <a href="/" class="mt-6 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
-          Browse all tools
+          {tr('tool.browseAll')}
         </a>
       </main>
     ) : (
       <main class="mx-auto max-w-5xl px-4 py-10">
         <!-- Breadcrumb -->
         <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
-          <a href="/" class="hover:text-slate-900">Home</a>
+          <a href="/" class="hover:text-slate-900">{tr('nav.home')}</a>
           {tool.categoryId && (
             <>
               <span class="px-2 text-slate-300">/</span>
@@ -102,7 +111,7 @@ const jsonLd = tool
                 <span class="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-700">MCP</span>
               )}
               {tool.isOpenSource && (
-                <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Open source</span>
+                <span class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">{tr('card.openSource')}</span>
               )}
             </div>
             {tool.oneLiner && <p class="mt-2 max-w-2xl text-lg text-slate-600">{tool.oneLiner}</p>}
@@ -128,7 +137,7 @@ const jsonLd = tool
             {
               parsed.pros.length > 0 && (
                 <div class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
-                  <h2 class="text-sm font-semibold uppercase tracking-wide text-emerald-700">Pros</h2>
+                  <h2 class="text-sm font-semibold uppercase tracking-wide text-emerald-700">{tr('tool.pros')}</h2>
                   <ul class="mt-3 space-y-1.5 text-sm text-slate-700">
                     {parsed.pros.map((p) => (
                       <li class="flex gap-2">
@@ -144,7 +153,7 @@ const jsonLd = tool
             {
               parsed.cons.length > 0 && (
                 <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-5">
-                  <h2 class="text-sm font-semibold uppercase tracking-wide text-amber-700">Cons</h2>
+                  <h2 class="text-sm font-semibold uppercase tracking-wide text-amber-700">{tr('tool.cons')}</h2>
                   <ul class="mt-3 space-y-1.5 text-sm text-slate-700">
                     {parsed.cons.map((c) => (
                       <li class="flex gap-2">
@@ -160,7 +169,7 @@ const jsonLd = tool
             {
               parsed.audience && (
                 <p class="mt-4 text-sm text-slate-500">
-                  <span class="font-medium text-slate-700">Target audience:</span> {parsed.audience}
+                  <span class="font-medium text-slate-700">{tr('tool.audience')}</span> {parsed.audience}
                 </p>
               )
             }
@@ -169,21 +178,21 @@ const jsonLd = tool
           <!-- Sidebar -->
           <aside class="space-y-4">
             <div class="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 class="text-sm font-semibold text-slate-900">Links</h2>
+              <h2 class="text-sm font-semibold text-slate-900">{tr('tool.links')}</h2>
               <div class="mt-3 space-y-2">
                 {tool.githubUrl && (
                   <a href={tool.githubUrl} target="_blank" rel="noopener noreferrer" class="block rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300">
-                    View on GitHub →
+                    {tr('tool.viewGithub')}
                   </a>
                 )}
                 {tool.websiteUrl && (
                   <a href={tool.websiteUrl} target="_blank" rel="noopener noreferrer" class="block rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300">
-                    Official website →
+                    {tr('tool.website')}
                   </a>
                 )}
                 {tool.categoryId && (
                   <a href={`/category/${tool.categoryId}`} class="block rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300">
-                    Category: {cat} →
+                    {tr('tool.category')} {cat} →
                   </a>
                 )}
               </div>
@@ -192,7 +201,7 @@ const jsonLd = tool
             {
               alts.length > 0 && (
                 <div class="rounded-xl border border-slate-200 bg-white p-5">
-                  <h2 class="text-sm font-semibold text-slate-900">Open source alternative to</h2>
+                  <h2 class="text-sm font-semibold text-slate-900">{tr('tool.altTo')}</h2>
                   <div class="mt-3 flex flex-wrap gap-1.5">
                     {alts.map((a) => (
                       <a
@@ -210,7 +219,7 @@ const jsonLd = tool
             {
               (tool.techStack ?? []).length > 0 && (
                 <div class="rounded-xl border border-slate-200 bg-white p-5">
-                  <h2 class="text-sm font-semibold text-slate-900">Tech stack</h2>
+                  <h2 class="text-sm font-semibold text-slate-900">{tr('tool.techStack')}</h2>
                   <div class="mt-3 flex flex-wrap gap-1.5">
                     {(tool.techStack ?? []).map((t) => (
                       <a
@@ -230,8 +239,8 @@ const jsonLd = tool
         {
           related.length > 0 && (
             <section class="mt-12 border-t border-slate-200 pt-8">
-              <h2 class="text-xl font-semibold text-slate-900">Related tools</h2>
-              <p class="mt-1 text-sm text-slate-500">Other open-source tools that share tags with {tool.name}.</p>
+              <h2 class="text-xl font-semibold text-slate-900">{tr('tool.related')}</h2>
+              <p class="mt-1 text-sm text-slate-500">{tr('tool.relatedDesc', { name: tool.name })}</p>
               <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {related.map((t) => (
                   <ToolCard tool={t} />

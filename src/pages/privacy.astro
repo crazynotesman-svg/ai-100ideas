@@ -1,49 +1,50 @@
 ---
 /**
- * /privacy — static legal page.
+ * /privacy — static legal page (SSR so it localizes with the language cookie).
  */
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import { getLang, useTranslations } from '../i18n/ui';
+
+export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const updated = new Date().getFullYear();
 ---
 
-<BaseLayout title="Privacy Policy" description="How 100 Ideas AI handles data on this directory.">
+<BaseLayout
+  title={tr('privacy.title')}
+  description={lang === 'zh' ? '100 Ideas AI 如何处理本目录的数据。' : 'How 100 Ideas AI handles data on this directory.'}
+  ogTitle={tr('privacy.title')}
+  ogKind="default"
+>
   <Header />
   <main class="mx-auto max-w-3xl px-4 py-12">
-    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Privacy Policy</h1>
-    <p class="mt-2 text-sm text-slate-500">Last updated: {updated}</p>
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">{tr('privacy.title')}</h1>
+    <p class="mt-2 text-sm text-slate-500">{tr('privacy.updated')} {updated}</p>
 
     <div class="mt-8 space-y-6 text-sm leading-relaxed text-slate-700">
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">What we collect</h2>
-        <p class="mt-2">
-          This directory is a static, read-only catalogue of publicly available open-source projects.
-          We do not require accounts to browse it. Tool metadata (name, description, stars, license,
-          repository links) is sourced from public GitHub data and enrichment providers.
-        </p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('privacy.s1h')}</h2>
+        <p class="mt-2">{tr('privacy.s1b')}</p>
       </section>
 
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">Submissions</h2>
-        <p class="mt-2">
-          If you submit a tool, the URL and optional email you provide are stored so we can review and
-          publish it. We use submitted emails solely for the submission workflow and never sell them.
-        </p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('privacy.s2h')}</h2>
+        <p class="mt-2">{tr('privacy.s2b')}</p>
       </section>
 
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">Analytics &amp; cookies</h2>
-        <p class="mt-2">
-          We may use privacy-respecting, aggregated analytics to understand traffic. We do not use
-          third-party advertising cookies.
-        </p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('privacy.s3h')}</h2>
+        <p class="mt-2">{tr('privacy.s3b')}</p>
       </section>
 
       <section>
-        <h2 class="text-lg font-semibold text-slate-900">Contact</h2>
-        <p class="mt-2">Questions about this policy? Open an issue on our GitHub repository.</p>
+        <h2 class="text-lg font-semibold text-slate-900">{tr('privacy.s4h')}</h2>
+        <p class="mt-2">{tr('privacy.s4b')}</p>
       </section>
     </div>
   </main>

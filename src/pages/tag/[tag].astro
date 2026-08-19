@@ -9,9 +9,13 @@ import Footer from '../../components/Footer.astro';
 import ToolCard from '../../components/ToolCard.astro';
 import { getTagBySlug, getToolsByTag } from '../../db/queries';
 import { tagLabel } from '../../lib/tags';
+import { getLang, useTranslations } from '../../i18n/ui';
 import { SITE_URL } from '../../consts';
 
 export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const { tag } = Astro.params;
 const tagInfo = tag ? await getTagBySlug(tag) : undefined;
@@ -23,13 +27,17 @@ if (!tagInfo) {
 
 const label = tag ? tagLabel(tag) : '';
 const year = new Date().getFullYear();
+const titleLabel = lang === 'zh' ? `最佳 ${label} 工具与框架` : `Best ${label} Tools & Frameworks`;
+const description = lang === 'zh'
+  ? `发现 ${tools.length}+ 个面向开发者的开源 ${label} 工具（${year}）。对比技术栈、许可证与 GitHub 星标——由 100 Ideas AI 精心整理。`
+  : `Discover ${tools.length}+ open-source ${label} tools for developers in ${year}. Compare tech stacks, licenses and GitHub stars — curated by 100 Ideas AI.`;
 
 const jsonLd = tagInfo
   ? {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      name: `Best ${label} Tools & Frameworks`,
-      description: `Discover ${tools.length}+ open-source ${label} tools for developers in ${year}. Compare tech stacks, licenses and GitHub stars.`,
+      name: titleLabel,
+      description,
       url: `${SITE_URL}/tag/${tag}`,
       mainEntity: {
         '@type': 'ItemList',
@@ -45,9 +53,12 @@ const jsonLd = tagInfo
 ---
 
 <BaseLayout
-  title={`Best ${label} Tools & Frameworks`}
-  description={`Discover ${tools.length}+ open-source ${label} tools for developers in ${year}. Compare tech stacks, licenses and GitHub stars — curated by 100 Ideas AI.`}
+  title={titleLabel}
+  description={description}
   keywords={[label, 'open source AI tools', 'AI directory', `${label} tools`]}
+  ogTitle={titleLabel}
+  ogKind="tag"
+  ogStars={tools.length}
   jsonLd={jsonLd}
   noindex={!tagInfo}
 >
@@ -56,16 +67,16 @@ const jsonLd = tagInfo
   <main class="mx-auto max-w-6xl px-4 py-12">
     <header>
       <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
-        <a href="/" class="hover:text-slate-900">Home</a>
+        <a href="/" class="hover:text-slate-900">{tr('nav.home')}</a>
         <span class="px-2 text-slate-300">/</span>
-        <a href="/tags" class="hover:text-slate-900">Tags</a>
+        <a href="/tags" class="hover:text-slate-900">{tr('nav.tags')}</a>
       </nav>
       <h1 class="mt-3 text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-        Best {label} Tools &amp; Frameworks
+        {titleLabel}
       </h1>
       <p class="mt-3 max-w-2xl text-slate-600">
-        {tools.length} open-source {label} tool{tools.length === 1 ? '' : 's'} for developers.
-        Compare tech stacks, licenses and GitHub stars — all in one place.
+        {tools.length} {lang === 'zh' ? `个开源 ${label} 工具` : `open-source ${label} tool${tools.length === 1 ? '' : 's'}`} {lang === 'zh' ? '面向开发者。' : ' for developers.'}
+        {lang === 'zh' ? '在一个页面内对比技术栈、许可证与 GitHub 星标。' : 'Compare tech stacks, licenses and GitHub stars — all in one place.'}
       </p>
     </header>
 
@@ -73,7 +84,7 @@ const jsonLd = tagInfo
       {
         tools.length === 0 ? (
           <p class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm text-slate-500">
-            No tools tagged “{label}” yet.
+            {tr('tag.empty', { label })}
           </p>
         ) : (
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

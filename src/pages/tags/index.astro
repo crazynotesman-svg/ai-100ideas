@@ -9,25 +9,35 @@ import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { getAllTags } from '../../db/queries';
 import { tagLabel } from '../../lib/tags';
+import { getLang, useTranslations } from '../../i18n/ui';
 import { SITE_URL } from '../../consts';
 
 export const prerender = false;
+
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
 
 const tags = await getAllTags();
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'CollectionPage',
-  name: 'Browse AI tools by tag',
-  description: 'Explore open-source AI tools grouped by tech stack, protocol and use case.',
+  name: tr('tags.title'),
+  description: lang === 'zh'
+    ? '按技术栈、协议与使用场景浏览开源 AI 工具。'
+    : 'Explore open-source AI tools grouped by tech stack, protocol and use case.',
   url: `${SITE_URL}/tags`,
 };
 ---
 
 <BaseLayout
-  title="Browse AI Tools by Tag"
-  description="Explore open-source AI tools grouped by tech stack, protocol and use case — Rust, Python, MCP, local-LLM and more."
+  title={tr('tags.title')}
+  description={lang === 'zh'
+    ? '按技术栈、协议与使用场景浏览开源 AI 工具——Rust、Python、MCP、本地大模型等。'
+    : 'Explore open-source AI tools grouped by tech stack, protocol and use case — Rust, Python, MCP, local-LLM and more.'}
   keywords={['AI tags', 'open source AI tools', 'tech stack']}
+  ogTitle={tr('tags.title')}
+  ogKind="tags"
   jsonLd={jsonLd}
 >
   <Header />
@@ -35,12 +45,12 @@ const jsonLd = {
   <main class="mx-auto max-w-6xl px-4 py-12">
     <header>
       <nav class="text-sm text-slate-500" aria-label="Breadcrumb">
-        <a href="/" class="hover:text-slate-900">Home</a>
+        <a href="/" class="hover:text-slate-900">{tr('nav.home')}</a>
       </nav>
       <h1 class="mt-3 text-balance text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-        Browse by tag
+        {tr('tags.title')}
       </h1>
-      <p class="mt-3 max-w-2xl text-slate-600">{tags.length} tags across the directory.</p>
+      <p class="mt-3 max-w-2xl text-slate-600">{tr('tags.subtitle', { n: tags.length })}</p>
     </header>
 
     <section class="mt-8 flex flex-wrap gap-2">

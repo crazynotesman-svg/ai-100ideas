@@ -8,14 +8,20 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import ToolCard from '../components/ToolCard.astro';
 import { categoryLabel } from '../lib/format';
+import { getLang, useTranslations } from '../i18n/ui';
 import { getAllCategories, getAllTools } from '../db/queries';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from '../consts';
 
 export const prerender = false;
 
+const lang = getLang(Astro);
+const tr = useTranslations(lang);
+
 const tools = await getAllTools();
 const categories = await getAllCategories();
 const mcpCount = tools.filter((t) => t.isMcp).length;
+
+const description = lang === 'zh' ? tr('home.heroSubtitle') : SITE_DESCRIPTION;
 
 const jsonLd = [
   {
@@ -50,7 +56,10 @@ const jsonLd = [
 <BaseLayout
   title={`${SITE_NAME} — ${SITE_TITLE}`}
   titleTemplate={false}
-  description={SITE_DESCRIPTION}
+  description={description}
+  ogTitle={tr('home.heroTitle')}
+  ogKind="home"
+  ogStars={tools.length}
   jsonLd={jsonLd}
 >
   <Header active="home" />
@@ -59,23 +68,23 @@ const jsonLd = [
     <!-- Hero -->
     <section class="text-center">
       <h1 class="text-balance text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-        Open source AI tools &amp; MCP servers
+        {tr('home.heroTitle')}
       </h1>
       <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-slate-600">
-        {SITE_DESCRIPTION}
+        {description}
       </p>
       <dl class="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm">
         <div class="flex items-baseline gap-2">
           <dt class="text-2xl font-semibold text-slate-900">{tools.length}</dt>
-          <dd class="text-slate-500">tools indexed</dd>
+          <dd class="text-slate-500">{tr('home.toolsIndexed')}</dd>
         </div>
         <div class="flex items-baseline gap-2">
           <dt class="text-2xl font-semibold text-slate-900">{mcpCount}</dt>
-          <dd class="text-slate-500">MCP servers</dd>
+          <dd class="text-slate-500">{tr('home.mcpServers')}</dd>
         </div>
         <div class="flex items-baseline gap-2">
           <dt class="text-2xl font-semibold text-slate-900">{categories.length}</dt>
-          <dd class="text-slate-500">categories</dd>
+          <dd class="text-slate-500">{tr('home.categories')}</dd>
         </div>
       </dl>
     </section>
@@ -90,14 +99,14 @@ const jsonLd = [
         <input
           id="tool-search"
           type="search"
-          placeholder="Search tools, stacks, alternatives…"
+          placeholder={tr('home.searchPlaceholder')}
           class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           autocomplete="off"
         />
       </div>
 
       <div id="cat-pills" class="mt-4 flex flex-wrap gap-2">
-        <button type="button" data-cat="all" aria-pressed="true" class="rounded-full border border-indigo-600 bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition">All</button>
+        <button type="button" data-cat="all" aria-pressed="true" class="rounded-full border border-indigo-600 bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition">{tr('home.catAll')}</button>
         {
           categories.map((c) => (
             <button
@@ -106,7 +115,7 @@ const jsonLd = [
               aria-pressed="false"
               class="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-600 transition hover:border-slate-300"
             >
-              {categoryLabel(c.slug)}
+              {categoryLabel(c.slug, lang)}
             </button>
           ))
         }
@@ -118,7 +127,7 @@ const jsonLd = [
       {
         tools.length === 0 ? (
           <p class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm text-slate-500">
-            No tools indexed yet. Run the ingestion pipeline to populate the directory.
+            {tr('home.noTools')}
           </p>
         ) : (
           <div id="tool-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -129,7 +138,7 @@ const jsonLd = [
         )
       }
       <p id="no-results" hidden class="mt-6 text-center text-sm text-slate-500">
-        No tools match your search.
+        {tr('home.noResults')}
       </p>
     </section>
   </main>
