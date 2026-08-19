@@ -10,6 +10,7 @@
 - 迁移用 `wrangler d1 migrations apply` 执行；`schema.sql` 只是全量快照
 - 绑定访问方式：`import { env } from 'cloudflare:workers'`（v13+ 已无 `Astro.locals.runtime`）
 - SEO 默认值集中在 `src/consts.ts`，所有页面必须走 `src/layouts/BaseLayout.astro`
+- **D1 REST API 载荷形态（踩过两次坑，务必照抄）**：`POST /accounts/{acct}/d1/database/{db}/query` 只认两种形态 —— `{ sql, params }`（单条；`sql` 内可放多条 `;` 分隔语句）或 `{ batch: [{ sql }, ...] }`（批量）。**没有 `bindings`，也没有 `statements`**：传 `bindings` → `7500 Wrong number of parameter bindings`；传 `statements` → `7400 Invalid property: sql => Required | Invalid property: batch => Required`。写批量优先用 `batch`。内联字面量用 `scripts/util.ts` 的 `sqlStr()` 转义。
 
 ## 本机环境限制
 
@@ -54,12 +55,15 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
   - 迁移：`drizzle/migrations/0001_vengeful_sphinx.sql` = `ALTER TABLE tools ADD tags text;`
 
 ## 站点状态
-- **已上线**：https://ai.100ideas.net/ 正常访问，D1 数据由 sync pipeline 灌满（354 tools / 247 MCP / 7 分类，截至 2026-08-12）。部署模型 = Cloudflare Worker（带 Assets）。
+- **已上线**：https://ai.100ideas.net/ 正常访问，D1 数据由 sync pipeline 灌满（**362 tools / 253 MCP / 7 分类**，截至 2026-08-19）。部署模型 = Cloudflare Worker（带 Assets）。
 - 前端已做：整卡可点（stretched-link）、Submit Tool 指向真实仓库。多语言按队长决定暂缓（保留纯英文）。
+- **标签聚合页已上线并回填完成**（2026-08-19）：266 个 `/tag/[slug]` 页 + `/tags` hub，sitemap 共 **969** 条 URL。回填 run `32266506042` success：362 个工具写入 `tags`，360 个有标签。Top 标签：mcp(253) / typescript(175) / docker(157) / python(156) / node-js(109) / go(44) / react(41) / rust(28)。工具详情页 Related tools（共享≥2标签）已生效。
+- ⚠️ 排查历史 workflow 是否跑过，**必须查 Actions run 列表**，不要从「当前 token 401」反推（曾因此误判 8/17 手动 sync 没跑，实际 run `32039127957` 是 success）。GitHub 对 `workflow_dispatch` 运行日志会较快清理，`/logs` 可能返回 `bytes=0`；要抓证据就趁早。
 
 ## 待办（后续阶段）
 
 - Phase 2：工具/MCP 列表页、分类页、"open source alternative to X" 落地页
 - Phase 3：提交队列、GitHub star 同步 Worker
 - 用设计稿或动态 OG 接口替换 `public/og-default.png` 占位图
-- 🔒 历史临时 PAT `ghp_Kqp3...`（repo+workflow）现已 **401 失效**（被吊销/过期），无需再 revoke。**重新部署/推送需队长提供新 PAT**（repo+workflow 作用域，因新增了 `backfill-tags.yml` 这个 workflow 文件）。
+- 🔒 PAT 现状：`ghp_Kqp3...` 已 401 失效（无需 revoke）。2026-08-19 队长提供新 PAT `ghp_CbSk...`（repo+workflow），**仍然有效**，后续推送/触发 workflow 用它；不再需要时提醒队长去 GitHub revoke。
+- 多语言（中英文 UI + Cookie 切换器）方案已设计但按队长决定暂缓。
