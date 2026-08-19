@@ -1,23 +1,66 @@
 /**
  * Dynamic OpenGraph social-card endpoint (/api/og).
  *
- * Edge-compatible, zero-dependency SVG generator for Cloudflare Workers.
- * Reads query params and returns a 1200×630 card with site branding, the
- * title, a one-line description and a stats badge (stars / license / tech
- * stack). No Node-native deps, no D1 access — it is a pure function of the
- * request URL.
+ * Edge-compatible PNG generator for Cloudflare Workers. Reads query params,
+ * builds a 1200×630 SVG card (site branding, title, one-line description and
+ * a stats badge of stars / license / tech stack) and rasterizes it to PNG via
+ * `@resvg/resvg-wasm` (pure WASM, runs on workerd — no Node-native addons).
  *
- * NOTE: SVG is delivered exactly as requested. Most social scrapers
- * (Twitter/X, Facebook, Slack, Discord, LinkedIn) require a raster image
- * (PNG/JPEG/WebP) and will not render SVG `og:image`. If real social-card
- * rendering is needed later, swap this body for `@resvg/resvg-js` (WASM,
- * runs on Workers) — the query-param contract stays identical.
+ * Why PNG not SVG: Twitter/X, LinkedIn, Discord and Slack require a raster
+ * `og:image` and will not render SVG. Query-param contract is unchanged from
+ * the earlier SVG version.
+ *
+ * Asset strategy:
+ *  - The 2.4 MB wasm and the Inter font buffers (≈68 KB each) are emitted as
+ *    Worker Assets (served from the `ASSETS` binding) and loaded once per
+ *    isolate. The wasm is NEVER inlined — it would exceed the Worker
+ *    script-size limit.
+ *  - We fetch the bytes through the `ASSETS` binding (not a same-origin
+ *    `fetch`) because the Worker runs with `global_fetch_strictly_public`,
+ *    which makes a plain `fetch()` to our own `/_astro/*` assets unreliable.
+ *  - Only Latin coverage is embedded; CJK glyphs in a description would fall
+ *    back to tofu (rare for this dataset, which is overwhelmingly English).
  */
 import type { APIRoute } from 'astro';
+
+import { env } from 'cloudflare:workers';
+import { Resvg, initWasm } from '@resvg/resvg-wasm';
+import wasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url';
+import inter400Url from '../../lib/og-fonts/inter-400.ttf?url';
+import inter700Url from '../../lib/og-fonts/inter-700.ttf?url';
 
 import { formatStars } from '../../lib/format';
 
 export const prerender = false;
+
+// The handwritten worker-configuration.d.ts may not type the ASSETS binding,
+// so we reach it through a narrow local interface.
+const assetsFetch = (
+  env as unknown as {
+    ASSETS: { fetch(input: string): Promise<Response> };
+  }
+).ASSETS.fetch;
+
+/** Load a Worker Asset (wasm/font) once and return its raw bytes. */
+async function loadAssetBytes(path: string): Promise<Uint8Array> {
+  const res = await assetsFetch(path);
+  if (!res.ok) throw new Error(`Failed to load OG asset ${path}: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+const fontUrls = [inter400Url, inter700Url];
+
+let wasmInit: Promise<void> | null = null;
+function ensureWasm(): Promise<void> {
+  if (!wasmInit) wasmInit = loadAssetBytes(wasmUrl).then((bytes) => initWasm(bytes));
+  return wasmInit;
+}
+
+let fontBuffersPromise: Promise<Uint8Array[]> | null = null;
+function ensureFonts(): Promise<Uint8Array[]> {
+  if (!fontBuffersPromise) fontBuffersPromise = Promise.all(fontUrls.map(loadAssetBytes));
+  return fontBuffersPromise;
+}
 
 const W = 1200;
 const H = 630;
@@ -107,11 +150,10 @@ interface Pill {
   accent: 'star' | 'neutral';
 }
 
-export const GET: APIRoute = ({ url }) => {
+export const GET: APIRoute = async ({ url }) => {
   const q = url.searchParams;
   const title = (q.get('title') ?? BRAND).slice(0, 120);
   const desc = (q.get('desc') ?? '').slice(0, 200);
-  const lang = q.get('lang') === 'zh' ? 'zh' : 'en';
   const starsRaw = q.get('stars');
   const stars = starsRaw != null ? Number.parseInt(starsRaw, 10) : NaN;
   const license = (q.get('license') ?? '').slice(0, 30);
@@ -121,7 +163,10 @@ export const GET: APIRoute = ({ url }) => {
     .filter(Boolean)
     .slice(0, 3);
 
-  const techLabel = lang === 'zh' ? '技术栈' : 'Tech stack';
+  // Kept English so the PNG never depends on a CJK font (only Latin is
+  // embedded); tool names/descriptions in this dataset are overwhelmingly
+  // English, so this covers the dominant case.
+  const techLabel = 'Tech stack';
 
   /* --- background --- */
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}">`;
@@ -200,10 +245,28 @@ export const GET: APIRoute = ({ url }) => {
 
   svg += `</svg>`;
 
-  return new Response(svg, {
+  /* --- rasterize to PNG via WASM --- */
+  await ensureWasm();
+  const fontBuffers = await ensureFonts();
+
+  const resvg = new Resvg(svg, {
+    font: {
+      fontBuffers,
+      defaultFontFamily: 'Inter',
+    },
+    fitTo: { mode: 'width', value: W },
+  });
+  const png = resvg.render();
+  const pngBytes = png.asPng();
+  // Copy into a fresh ArrayBuffer-backed view so the TS lib (Uint8Array<ArrayBuffer>)
+  // matches the Response BodyInit type regardless of the WASM return generic.
+  const body = new Uint8Array(pngBytes);
+
+  return new Response(body, {
     headers: {
-      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'Content-Type': 'image/png',
       'Cache-Control': 'public, max-age=86400, s-maxage=86400',
+      'Content-Length': String(body.length),
     },
   });
 };

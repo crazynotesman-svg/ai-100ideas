@@ -54,9 +54,20 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
   - 回填：`scripts/backfill-tags.ts` 走 Cloudflare D1 REST API 写回 `tags`（CI 用 `CLOUDFLARE_*` secrets，零 token）；`.github/workflows/backfill-tags.yml` 手动 `workflow_dispatch`。**必须先成功 deploy（迁移建好列）再跑回填**。
   - 迁移：`drizzle/migrations/0001_vengeful_sphinx.sql` = `ALTER TABLE tools ADD tags text;`
 
+## 双语 UI & 动态 OG（2026-08-19 上线）
+
+- **双语（Option A）**：`src/i18n/ui.ts` = EN/ZH 字典（覆盖 nav/header/footer/card/home/tool/mcp/alternatives/categories/tags/alternative-to/privacy/terms）+ `getLang(Astro)`（cookie `site_lang` 优先，否则 `Accept-Language`）+ `useTranslations(lang)`。每个组件/页面自行 `getLang(Astro)` 解析语言（**无 prop-drilling、无 middleware**，SSR 与构建期 prerender 都适用；prerender 期无 cookie/header → 回退 en）。
+  - `src/components/LanguageSwitcher.astro`：`EN | 中文` 切换，点击写 `site_lang` cookie（1 年）+ `location.reload()`，SSR 据此重渲。
+  - `src/lib/format.ts`：`categoryLabel(slug, lang='en')` + `CATEGORY_LABELS_ZH`；`ToolCard`/详情页/首页分类 pill 传入 `lang`。
+  - 隐私/条款页改为 `prerender=false`（否则静态构建写死英文）；其余页面本就是 SSR。
+- **动态 OG（Option C）→ PNG 升级（2026-08-19）**：`src/pages/api/og.ts` 现用 `@resvg/resvg-wasm`（纯 WASM，worker 可跑）把 SVG 栅格化为 `image/png`（1200×630：品牌/`title`/`desc`/星标·许可证·技术栈 pill，暗色开发风；`Cache-Control: public, max-age=86400`）。
+  - ⚠️ **坑**：resvg **只认 TTF/OTF，不认 WOFF**（WOFF 被静默忽略→文字成空白）。字体 = `src/lib/og-fonts/inter-{400,700}.ttf`（由 @fontsource 的 woff 经 WOFF→TTF 还原得到，仅 Latin 覆盖；CJK 描述会成豆腐块，边缘情况）。
+  - wasm(2.4MB) 与字体(各~68KB) 经 Vite `?url` 产出为 Worker **Assets**；运行时用 **`env.ASSETS.fetch(path)`** 加载（不能用同源 `fetch`：Worker 带 `global_fetch_strictly_public` 标志，同源 `fetch('/_astro/*')` 不可靠）。wasm 绝不能内联（超 Worker 脚本体积上限）。query 参数契约不变。
+  - `BaseLayout` 默认把 `og:image`/`twitter:image` 指向动态端点（传 `ogKind`/`ogStars`/`ogLicense`/`ogTags`/`ogTitle` 增强；显式传非默认 `image` 则回退静态图）。所有页面已注入 `twitter:card=summary_large_image`。
+
 ## 站点状态
 - **已上线**：https://ai.100ideas.net/ 正常访问，D1 数据由 sync pipeline 灌满（**362 tools / 253 MCP / 7 分类**，截至 2026-08-19）。部署模型 = Cloudflare Worker（带 Assets）。
-- 前端已做：整卡可点（stretched-link）、Submit Tool 指向真实仓库。多语言按队长决定暂缓（保留纯英文）。
+- 前端已做：整卡可点（stretched-link）、Submit Tool 指向真实仓库。**双语 UI（EN/ZH）已上线**：`src/i18n/ui.ts` 字典 + `getLang(Astro)`（cookie `site_lang` 优先，否则 `Accept-Language`）+ `LanguageSwitcher.astro`；Header/Footer/ToolCard/所有页面已翻译；`categoryLabel(slug, lang)` 支持中文分类名；`BaseLayout` 按请求解析 `<html lang>` 与 `og:locale`。
 - **标签聚合页已上线并回填完成**（2026-08-19）：266 个 `/tag/[slug]` 页 + `/tags` hub，sitemap 共 **969** 条 URL。回填 run `32266506042` success：362 个工具写入 `tags`，360 个有标签。Top 标签：mcp(253) / typescript(175) / docker(157) / python(156) / node-js(109) / go(44) / react(41) / rust(28)。工具详情页 Related tools（共享≥2标签）已生效。
 - ⚠️ 排查历史 workflow 是否跑过，**必须查 Actions run 列表**，不要从「当前 token 401」反推（曾因此误判 8/17 手动 sync 没跑，实际 run `32039127957` 是 success）。GitHub 对 `workflow_dispatch` 运行日志会较快清理，`/logs` 可能返回 `bytes=0`；要抓证据就趁早。
 
@@ -64,6 +75,6 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
 
 - Phase 2：工具/MCP 列表页、分类页、"open source alternative to X" 落地页
 - Phase 3：提交队列、GitHub star 同步 Worker
-- 用设计稿或动态 OG 接口替换 `public/og-default.png` 占位图
+- 动态 OG（PNG）接口已上线（`/api/og` 现返回 `image/png`，由 resvg-wasm 栅格化）；`public/og-default.png` 仅在页面显式传非默认 `image` 时作为回退。
 - 🔒 PAT 现状：`ghp_Kqp3...` 已 401 失效（无需 revoke）。2026-08-19 队长提供新 PAT `ghp_CbSk...`（repo+workflow），**仍然有效**，后续推送/触发 workflow 用它；不再需要时提醒队长去 GitHub revoke。
-- 多语言（中英文 UI + Cookie 切换器）方案已设计但按队长决定暂缓。
+- 多语言（中英文 UI + Cookie 切换器）**已于 2026-08-19 上线**（commit `0b5bcf4`，见上「双语 UI & 动态 OG」节）。
