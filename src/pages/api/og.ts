@@ -12,18 +12,18 @@
  *
  * Asset strategy:
  *  - The 2.4 MB wasm and the Inter font buffers (≈68 KB each) are emitted as
- *    Worker Assets (served from the `ASSETS` binding) and loaded once per
- *    isolate. The wasm is NEVER inlined — it would exceed the Worker
- *    script-size limit.
- *  - We fetch the bytes through the `ASSETS` binding (not a same-origin
- *    `fetch`) because the Worker runs with `global_fetch_strictly_public`,
- *    which makes a plain `fetch()` to our own `/_astro/*` assets unreliable.
+ *    Worker Assets and loaded once per isolate. The wasm is NEVER inlined —
+ *    it would exceed the Worker script-size limit.
+ *  - We fetch the bytes at runtime via a same-origin absolute URL. The Worker
+ *    runs with `global_fetch_strictly_public`, but fetching our own public
+ *    domain is allowed (verified: /_astro/* assets return 200). This avoids
+ *    depending on the `ASSETS` binding, which is not reliably typed in the
+ *    handwritten worker-configuration.d.ts.
  *  - Only Latin coverage is embedded; CJK glyphs in a description would fall
  *    back to tofu (rare for this dataset, which is overwhelmingly English).
  */
 import type { APIRoute } from 'astro';
 
-import { env } from 'cloudflare:workers';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
 import wasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url';
 import inter400Url from '../../lib/og-fonts/inter-400.ttf?url';
@@ -33,17 +33,9 @@ import { formatStars } from '../../lib/format';
 
 export const prerender = false;
 
-// The handwritten worker-configuration.d.ts may not type the ASSETS binding,
-// so we reach it through a narrow local interface.
-const assetsFetch = (
-  env as unknown as {
-    ASSETS: { fetch(input: string): Promise<Response> };
-  }
-).ASSETS.fetch;
-
 /** Load a Worker Asset (wasm/font) once and return its raw bytes. */
-async function loadAssetBytes(path: string): Promise<Uint8Array> {
-  const res = await assetsFetch(path);
+async function loadAssetBytes(path: string, origin: string): Promise<Uint8Array> {
+  const res = await fetch(new URL(path, origin));
   if (!res.ok) throw new Error(`Failed to load OG asset ${path}: ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -51,14 +43,14 @@ async function loadAssetBytes(path: string): Promise<Uint8Array> {
 const fontUrls = [inter400Url, inter700Url];
 
 let wasmInit: Promise<void> | null = null;
-function ensureWasm(): Promise<void> {
-  if (!wasmInit) wasmInit = loadAssetBytes(wasmUrl).then((bytes) => initWasm(bytes));
+function ensureWasm(origin: string): Promise<void> {
+  if (!wasmInit) wasmInit = loadAssetBytes(wasmUrl, origin).then((bytes) => initWasm(bytes));
   return wasmInit;
 }
 
 let fontBuffersPromise: Promise<Uint8Array[]> | null = null;
-function ensureFonts(): Promise<Uint8Array[]> {
-  if (!fontBuffersPromise) fontBuffersPromise = Promise.all(fontUrls.map(loadAssetBytes));
+function ensureFonts(origin: string): Promise<Uint8Array[]> {
+  if (!fontBuffersPromise) fontBuffersPromise = Promise.all(fontUrls.map((u) => loadAssetBytes(u, origin)));
   return fontBuffersPromise;
 }
 
@@ -246,8 +238,8 @@ export const GET: APIRoute = async ({ url }) => {
   svg += `</svg>`;
 
   /* --- rasterize to PNG via WASM --- */
-  await ensureWasm();
-  const fontBuffers = await ensureFonts();
+  await ensureWasm(url.origin);
+  const fontBuffers = await ensureFonts(url.origin);
 
   const resvg = new Resvg(svg, {
     font: {
