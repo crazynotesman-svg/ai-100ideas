@@ -40,6 +40,19 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
 - 想全量重跑（改了 prompt/schema 时）：手动触发并勾 `force_reenrich`，或本地 `--force`。
 - workflow 文件名保留 `daily-sync.yml`（保住 Actions 历史 + DEPLOY.md 多处引用），但显示名与实际频率已不是 daily。
 
+## 标签聚合页（程序化 SEO）
+
+- 需求：用 `/tag/[tag]` 自动生成标签页抓长尾流量（例：`/tag/rust`、`/tag/local-llm`、`/tag/mcp`）。
+- **关键约束：原 schema 没有 `tags` 列**。工具数据只有 `techStack`（数组）、`categoryId`、`isMcp`、`alternativeTo`。
+- 方案（队长选定）：新增 `tags` JSON 列 + **免费本地回填**（不调 DeepSeek）。
+  - `src/lib/tags.ts`：`deriveTags(tool)` 从 techStack+isMcp 派生标签，含语义映射（`ollama`/`llama.cpp`/... → `local-llm`；`C++`→`cpp` 等别名）；`effectiveTags(tool)` = 存储 `tags` 优先、否则派生（代码一上线即可用，回填前也不依赖列）。
+  - `src/db/queries.ts`：`getAllTags()`（去重+计数）、`getToolsByTag(slug)`、`getTagBySlug(slug)`、`getRelatedTools(tool, minShared=2)`（共享≥2标签 → 工具详情页 Related Tools）。
+  - 页面：`src/pages/tag/[tag].astro`（SSR `get()`，H1 `Best {Label} Tools & Frameworks`，模板化简介免 token，CollectionPage JSON-LD）、`src/pages/tags/index.astro`（标签索引，助爬取）。
+  - SEO：`BaseLayout` 自动 canonical；`sitemap.xml.ts` 增加 `/tags` + 所有 `/tag/[slug]`（优先级 0.5）。
+  - 内链：`ToolCard` 技术栈 chip → `/tag/[slug]`（加 `relative z-10` 浮在拉伸链接之上）；工具详情页侧栏技术栈也改链接；Header/Footer 加 Tags 入口。
+  - 回填：`scripts/backfill-tags.ts` 走 Cloudflare D1 REST API 写回 `tags`（CI 用 `CLOUDFLARE_*` secrets，零 token）；`.github/workflows/backfill-tags.yml` 手动 `workflow_dispatch`。**必须先成功 deploy（迁移建好列）再跑回填**。
+  - 迁移：`drizzle/migrations/0001_vengeful_sphinx.sql` = `ALTER TABLE tools ADD tags text;`
+
 ## 站点状态
 - **已上线**：https://ai.100ideas.net/ 正常访问，D1 数据由 sync pipeline 灌满（354 tools / 247 MCP / 7 分类，截至 2026-08-12）。部署模型 = Cloudflare Worker（带 Assets）。
 - 前端已做：整卡可点（stretched-link）、Submit Tool 指向真实仓库。多语言按队长决定暂缓（保留纯英文）。
@@ -49,4 +62,4 @@ workerd 二进制在这台 Windows 上崩溃（0xc0000005），因此：
 - Phase 2：工具/MCP 列表页、分类页、"open source alternative to X" 落地页
 - Phase 3：提交队列、GitHub star 同步 Worker
 - 用设计稿或动态 OG 接口替换 `public/og-default.png` 占位图
-- 🔒 安全收尾：GitHub 上 Revoke 历史会话用的临时 PAT `ghp_Kqp3...`（已含 repo+workflow 作用域）
+- 🔒 历史临时 PAT `ghp_Kqp3...`（repo+workflow）现已 **401 失效**（被吊销/过期），无需再 revoke。**重新部署/推送需队长提供新 PAT**（repo+workflow 作用域，因新增了 `backfill-tags.yml` 这个 workflow 文件）。

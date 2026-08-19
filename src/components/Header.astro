@@ -7,7 +7,7 @@ import { GITHUB_URL, SITE_NAME, SUBMIT_TOOL_URL } from '../consts';
 
 interface Props {
   /** Highlights the active nav item. */
-  active?: 'home' | 'mcp' | 'alternatives' | 'categories';
+  active?: 'home' | 'mcp' | 'alternatives' | 'categories' | 'tags';
 }
 
 const { active = '' } = Astro.props;
@@ -16,6 +16,7 @@ const nav = [
   { href: '/', label: 'All Tools', key: 'home' as const },
   { href: '/mcp', label: 'MCP Servers', key: 'mcp' as const },
   { href: '/alternatives', label: 'Alternatives', key: 'alternatives' as const },
+  { href: '/tags', label: 'Tags', key: 'tags' as const },
   { href: '/categories', label: 'Categories', key: 'categories' as const },
 ];
 

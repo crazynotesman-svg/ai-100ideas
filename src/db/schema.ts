@@ -59,6 +59,13 @@ export const tools = sqliteTable(
     /** JSON array string — e.g. '["TypeScript","Postgres"]'. */
     techStack: text('tech_stack', { mode: 'json' }).$type<string[]>(),
 
+    /** JSON array string of derived tags — e.g. '["rust","local-llm","mcp"]'.
+     *  Computed from `techStack` + `isMcp` + a semantic map (see src/lib/tags),
+     *  backfilled by scripts/backfill-tags.ts. Powers the programmatic
+     *  /tag/[tag] aggregation pages and the "Related Tools" recommendations.
+     *  Null until backfilled; queries fall back to deriving tags in code. */
+    tags: text('tags', { mode: 'json' }).$type<string[]>(),
+
     isMcp: integer('is_mcp', { mode: 'boolean' }).notNull().default(false),
     isOpenSource: integer('is_open_source', { mode: 'boolean' }).notNull().default(true),
 

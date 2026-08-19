@@ -9,6 +9,7 @@ import type { Category, Tool } from './schema';
 import { categories, tools } from './schema';
 import { getDb } from './client';
 import { slugify } from '../lib/format';
+import { effectiveTags } from '../lib/tags';
 
 /** All tools, highest stars first. */
 export async function getAllTools(): Promise<Tool[]> {
@@ -94,4 +95,59 @@ export async function getCategoriesWithCounts(): Promise<CategoryCount[]> {
     category,
     count: all.filter((t) => t.categoryId === category.id).length,
   }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* tags                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface TagInfo {
+  /** URL slug, e.g. "rust", "local-llm", "mcp". */
+  slug: string;
+  /** Number of tools carrying this tag. */
+  count: number;
+}
+
+/** All distinct tags across the catalogue, with tool counts, highest first. */
+export async function getAllTags(): Promise<TagInfo[]> {
+  const all = await getAllTools();
+  const counts = new Map<string, number>();
+  for (const t of all) {
+    for (const tag of effectiveTags(t)) {
+      const s = slugify(tag);
+      counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([slug, count]) => ({ slug, count }))
+    .sort((a, b) => b.count - a.count || a.slug.localeCompare(b.slug));
+}
+
+/** Tools carrying the given tag slug. */
+export async function getToolsByTag(tagSlug: string): Promise<Tool[]> {
+  const all = await getAllTools();
+  return all.filter((t) => effectiveTags(t).some((x) => slugify(x) === tagSlug));
+}
+
+/** Look up a single tag (with its count), or undefined if it doesn't exist. */
+export async function getTagBySlug(slug: string): Promise<TagInfo | undefined> {
+  return (await getAllTags()).find((t) => t.slug === slug);
+}
+
+/**
+ * "Related Tools" — tools sharing at least `minShared` tags with `tool`.
+ * Sorted by number of shared tags, then stars. Powers the internal link web
+ * that helps Google crawl deep into the catalogue.
+ */
+export async function getRelatedTools(tool: Tool, minShared = 2, limit = 6): Promise<Tool[]> {
+  const baseSet = new Set(effectiveTags(tool).map(slugify));
+  if (baseSet.size === 0) return [];
+  const all = await getAllTools();
+  return all
+    .filter((t) => t.id !== tool.id)
+    .map((t) => ({ tool: t, shared: effectiveTags(t).filter((x) => baseSet.has(slugify(x))).length }))
+    .filter((x) => x.shared >= minShared)
+    .sort((a, b) => b.shared - a.shared || b.tool.stars - a.tool.stars)
+    .slice(0, limit)
+    .map((x) => x.tool);
 }

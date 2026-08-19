@@ -32,6 +32,7 @@ CREATE TABLE `tools` (
 	`category_id` text,
 	`alternative_to` text,          -- JSON array string, e.g. '["Notion","Pinecone"]'
 	`tech_stack` text,              -- JSON array string, e.g. '["TypeScript","Postgres"]'
+	`tags` text,                    -- JSON array string of derived tags, e.g. '["rust","local-llm","mcp"]'
 	`is_mcp` integer DEFAULT false NOT NULL,
 	`is_open_source` integer DEFAULT true NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
