@@ -153,7 +153,10 @@ async function applyViaRest(sql: string[]): Promise<void> {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ statements: sql.map((s) => ({ sql: s })) }),
+    // The D1 /query endpoint accepts `sql` (one string, `;`-separated
+    // statements allowed) or `batch` ([{ sql }]). It rejects `statements` with
+    // "Invalid property" — this path used to send that and would always 400.
+    body: JSON.stringify({ sql: sql.join('\n') }),
   });
   const data = (await res.json()) as {
     success: boolean;

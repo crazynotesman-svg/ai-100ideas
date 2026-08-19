@@ -12,11 +12,12 @@
  * Actions workflow. Requires the `tags` column to already exist (apply the
  * latest Drizzle migration first).
  *
- * NOTE on the D1 REST API shape: this endpoint does NOT accept a `bindings`
- * field. Two shapes are valid — `{ sql, params }` for a single parameterised
- * statement, or `{ statements: [{ sql }, ...] }` for a batch of literal
- * statements. We use the batch form (same as scripts/sync.ts) so the whole
- * backfill costs a handful of round-trips instead of one per row.
+ * NOTE on the D1 REST API shape: /query accepts either `sql` (a single string,
+ * which may hold several `;`-separated statements) or `batch` (an array of
+ * `{ sql }` objects). It does NOT accept `bindings` or `statements` — sending
+ * those yields "Wrong number of parameter bindings" / "Invalid property"
+ * respectively. We prefer `batch` and transparently fall back to a joined
+ * multi-statement `sql` string, so the backfill survives either API shape.
  */
 import { deriveTags } from '../src/lib/tags';
 import { sqlStr } from './util';
@@ -71,9 +72,34 @@ function d1exec(sql: string, label = 'query'): Promise<D1Result[]> {
   return post({ sql }, label);
 }
 
+/**
+ * Which batch payload shape this D1 endpoint accepts. Probed once on the first
+ * batch, then reused so we don't pay a failed request per chunk.
+ */
+let batchShape: 'batch' | 'joined' | undefined;
+
 /** Run a batch of literal statements in one request. */
-function d1batch(statements: string[], label = 'batch'): Promise<D1Result[]> {
-  return post({ statements: statements.map((sql) => ({ sql })) }, label);
+async function d1batch(statements: string[], label = 'batch'): Promise<D1Result[]> {
+  const asBatch = () => post({ batch: statements.map((sql) => ({ sql })) }, label);
+  const asJoined = () => post({ sql: statements.join('\n') }, `${label} (joined)`);
+
+  if (batchShape === 'batch') return asBatch();
+  if (batchShape === 'joined') return asJoined();
+
+  try {
+    const out = await asBatch();
+    batchShape = 'batch';
+    console.log('D1 batch shape: { batch: [...] }');
+    return out;
+  } catch (err) {
+    console.log(
+      `D1 rejected { batch: [...] } (${(err as Error).message}); retrying as a joined multi-statement string.`,
+    );
+    const out = await asJoined();
+    batchShape = 'joined';
+    console.log('D1 batch shape: { sql: "stmt; stmt; ..." }');
+    return out;
+  }
 }
 
 function asArray(value: unknown): string[] {
